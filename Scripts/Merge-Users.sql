@@ -237,6 +237,25 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
 
 
 ------------------------------------------------------------
--- Rollback everything during dev
+-- Commit changes
 ------------------------------------------------------------
-ROLLBACK;
+\echo
+\echo 'Committing changes.'
+
+ROLLBACK; -- Use ROLLBACK for safety during testing. Change to COMMIT when ready.
+--COMMIT;
+
+------------------------------------------------------------
+-- Delete old users
+------------------------------------------------------------
+\echo
+\echo 'Deleting old users.'
+
+DELETE FROM users
+WHERE id = ANY (:'old_user_ids');
+
+SELECT COUNT(*) AS remaining_old_users
+FROM users
+WHERE id = ANY (:'old_user_ids')
+\gset
+\echo 'Remaining old users (should be 0): ':remaining_old_users
