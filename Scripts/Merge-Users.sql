@@ -1,0 +1,242 @@
+\set ON_ERROR_STOP on
+\set QUIET on
+\pset footer off
+
+------------------------------------------------------------
+-- Echo inputs and environment
+------------------------------------------------------------
+\echo 
+\echo 'Inputs:'
+
+SELECT string_to_array(:'old_emails', ',') AS old_email_array
+\gset
+
+SELECT
+    current_database()          AS database,
+    :'old_emails'          AS old_emails,
+    :'new_email'                AS new_email;
+
+SELECT string_to_array(:'old_emails', ',') AS old_email_array
+\gset
+\echo 'Old emails converted to an array: ':old_email_array
+
+SELECT array_agg(id) AS old_user_ids
+FROM users
+WHERE email = ANY (:'old_email_array')
+\gset
+
+SELECT id AS new_user_id
+FROM users
+WHERE email = :'new_email'
+\gset
+
+\echo 'Found user IDs to merge: ':old_user_ids' -> ':new_user_id
+
+------------------------------------------------------------
+-- Start Transaction
+------------------------------------------------------------
+\echo
+\echo 'Starting Transaction'
+BEGIN;
+
+------------------------------------------------------------
+-- Delete old slack user
+------------------------------------------------------------
+\echo
+\echo 'Deleteing slack users for old user IDs'
+
+SELECT su.user_id, su.user_name, ss.workspace_name
+FROM slack_users su
+left join slack_spaces ss on su.slack_team_id = ss.team_id 
+WHERE su.user_id = ANY (:'old_user_ids');
+
+DELETE FROM slack_users
+WHERE user_id = ANY (:'old_user_ids');
+
+SELECT COUNT(*) AS deleted_slack_users
+FROM slack_users
+WHERE user_id = ANY (:'old_user_ids')
+\gset
+\echo 'Deleted slack users count (should be 0): ':deleted_slack_users
+
+------------------------------------------------------------
+-- Update role mappings
+------------------------------------------------------------
+\echo
+\echo 'Updating role mappings to new user ID'
+
+select u.f3_name, o."name" as org, o."org_type" , r."name"
+from roles_x_users_x_org ruo
+left join orgs o on ruo.org_id = o.id
+left join users u on ruo.user_id = u.id
+left join roles r on ruo.role_id = r.id
+WHERE ruo.user_id = ANY (:'old_user_ids');
+
+UPDATE roles_x_users_x_org
+SET user_id = :'new_user_id'
+WHERE user_id = ANY (:'old_user_ids');
+
+SELECT COUNT(*) AS remaining_old_role_mappings
+FROM roles_x_users_x_org
+WHERE user_id = ANY (:'old_user_ids')
+\gset
+\echo 'Remaining role mappings for old user IDs (should be 0): ':remaining_old_role_mappings
+
+------------------------------------------------------------
+-- Update permission mappings
+------------------------------------------------------------
+\echo
+\echo 'Updating permission mappings to new user ID'
+
+select u.f3_name, o."name" as org, o."org_type" , p."name"
+from positions_x_orgs_x_users pou
+left join orgs o on pou.org_id = o.id
+left join users u on pou.user_id = u.id
+left join positions p on pou.position_id = p.id
+WHERE pou.user_id = ANY (:'old_user_ids');
+
+UPDATE positions_x_orgs_x_users
+SET user_id = :'new_user_id'
+WHERE user_id = ANY (:'old_user_ids');
+
+SELECT COUNT(*) AS remaining_old_permission_mappings
+FROM positions_x_orgs_x_users
+WHERE user_id = ANY (:'old_user_ids')
+\gset
+\echo 'Remaining permission mappings for old user IDs (should be 0): ':remaining_old_permission_mappings
+
+------------------------------------------------------------
+-- Update achievements
+------------------------------------------------------------
+\echo ''
+\echo 'Achievement remapping is not currently implemented. There is a unique key constraint on (user_id, achievement_id, award_year, award_period) that must be handled. And we''re not even using achievements yet...'
+
+------------------------------------------------------------
+-- Update API Keys
+------------------------------------------------------------
+\echo
+\echo 'Updating API Keys to new user ID'
+
+select u.f3_name, k."name"
+from api_keys k
+left join users u on k.owner_id = u.id
+WHERE k.owner_id = ANY (:'old_user_ids');
+
+UPDATE api_keys
+SET owner_id = :'new_user_id'
+WHERE owner_id = ANY (:'old_user_ids');
+
+SELECT COUNT(*) AS remaining_old_permission_mappings
+FROM positions_x_orgs_x_users
+WHERE user_id = ANY (:'old_user_ids')
+\gset
+\echo 'Remaining API Key mappings for old user IDs (should be 0): ':remaining_old_permission_mappings
+
+------------------------------------------------------------
+-- Update expansion
+------------------------------------------------------------
+\echo ''
+\echo 'Expansion remapping is not currently implemented. We''re not currently using it.'
+
+------------------------------------------------------------
+-- Update attendance
+------------------------------------------------------------
+\echo
+\echo 'Updating attendance to new user ID'
+
+-- is_planned flag TRUE
+WITH conflicting_events_planned AS (
+    SELECT DISTINCT a.event_instance_id
+    FROM attendance a
+    WHERE a.user_id = :new_user_id
+      AND EXISTS (
+          SELECT 1
+          FROM attendance a2
+          WHERE a2.event_instance_id = a.event_instance_id
+            AND a2.user_id = ANY (:'old_user_ids'::int[])
+      )
+    AND a.is_planned = TRUE
+),
+deleted AS (
+    DELETE FROM attendance
+    WHERE event_instance_id IN (
+        SELECT event_instance_id
+        FROM conflicting_events_planned
+    )
+      AND user_id = ANY (:'old_user_ids'::int[])
+    RETURNING 1
+)
+SELECT COUNT(*) AS attendance_deleted_planned
+FROM deleted
+\gset
+\echo 'Deleted ':attendance_deleted_planned' attendance for old users when old and new users were both mapped and is_planned is TRUE.'
+
+-- is_planned flag FALSE
+WITH conflicting_events_notplanned AS (
+    SELECT DISTINCT a.event_instance_id
+    FROM attendance a
+    WHERE a.user_id = :new_user_id
+      AND EXISTS (
+          SELECT 1
+          FROM attendance a2
+          WHERE a2.event_instance_id = a.event_instance_id
+            AND a2.user_id = ANY (:'old_user_ids'::int[])
+      )
+    AND a.is_planned = FALSE
+),
+deleted AS (
+    DELETE FROM attendance
+    WHERE event_instance_id IN (
+        SELECT event_instance_id
+        FROM conflicting_events_notplanned
+    )
+      AND user_id = ANY (:'old_user_ids'::int[])
+    RETURNING 1
+)
+SELECT COUNT(*) AS attendance_deleted_notplanned
+FROM deleted
+\gset
+\echo 'Deleted ':attendance_deleted_notplanned' attendance for old users when old and new users were both mapped and is_planned is FALSE.'
+
+-- update remaining
+WITH updated AS (
+    UPDATE attendance
+    SET user_id = :new_user_id
+    WHERE user_id = ANY (:'old_user_ids'::int[])
+    RETURNING 1
+)
+SELECT COUNT(*) AS attendance_updated
+FROM updated
+\gset
+\echo 'Updated ':attendance_updated' attendance records to new user ID.'
+
+SELECT COUNT(*) AS remaining_old_attendance
+FROM attendance
+WHERE user_id = ANY (:'old_user_ids'::int[])
+\gset
+\echo 'Remaining attendance records for old user IDs (should be 0): ':remaining_old_attendance
+
+------------------------------------------------------------
+-- Manual confirmation
+------------------------------------------------------------
+\echo ''
+\echo '==================================================='
+\echo 'You are about to:'
+\echo '  - Delete slack users listed above'
+\echo '  - Update roles listed above'
+\echo '  - Update positions listed above'
+\echo '  - Update achievements listed above (NOT IMPLEMENTED)'
+\echo '  - Update API Keys listed above'
+\echo '  - Update expansions listed above (NOT IMPLEMENTED)'
+\echo '  - Update attendance records indicated above'
+\echo
+\echo 'Above changes will be commited, then old users will be deleted. Delete action is taken separately in case unhandled references remain.'
+\echo '==================================================='
+\echo 'Press ENTER to continue or Ctrl+C to abort'
+\prompt confirm
+
+
+------------------------------------------------------------
+-- Rollback everything during dev
+------------------------------------------------------------
+ROLLBACK;
