@@ -89,7 +89,7 @@ WHERE org_id = :'old_org'::int
 \echo '  - Update events.org_id'
 \echo '  - Delete org_id: ':old_org''
 \echo '==================================================='
-\echo 'Press ENTER to continue or Ctrl+C to abort'
+\echo 'Press ENTER to continue or Ctrl+C to abort and rollback changes.'
 \prompt confirm
 
 ------------------------------------------------------------
