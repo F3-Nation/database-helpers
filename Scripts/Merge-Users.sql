@@ -1,3 +1,28 @@
+-- ============================================================
+-- Merge-Users.sql
+--
+-- Help / Usage
+--
+-- This script consolidates user records by taking one or more
+-- `old_emails` and a single `new_email`, then remaps/deletes
+-- related rows (slack_users, roles, permissions, etc.) to the
+-- `new_email` user.
+--
+-- Examples:
+--
+--    Pass a comma-separated list of emails. The script will
+--    convert it into an array and use `= ANY(array)` in queries.
+--
+--    psql service=staging -f Scripts/Merge-Users.sql \
+--      -v new_email='bob@gmail.com' \
+--      -v old_emails='bob@yahoo.com,bob@msn.com'
+--
+--    psql service=staging -f Scripts/Merge-Users.sql \
+--      -v new_email='bob@gmail.com' \
+--      -v old_emails='bob@yahoo.com'
+--
+-- ============================================================
+
 \set ON_ERROR_STOP on
 \set QUIET on
 \pset footer off
@@ -232,7 +257,7 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
 \echo
 \echo 'Above changes will be commited, then old users will be deleted. Delete action is taken separately in case unhandled references remain.'
 \echo '==================================================='
-\echo 'Press ENTER to continue or Ctrl+C to abort'
+\echo 'Press ENTER to continue or Ctrl+C to abort and rollback changes.'
 \prompt confirm
 
 
@@ -242,20 +267,47 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
 \echo
 \echo 'Committing changes.'
 
-ROLLBACK; -- Use ROLLBACK for safety during testing. Change to COMMIT when ready.
---COMMIT;
+--ROLLBACK; -- Use ROLLBACK for safety during testing. Change to COMMIT when ready.
+COMMIT;
 
 ------------------------------------------------------------
 -- Delete old users
 ------------------------------------------------------------
 \echo
-\echo 'Deleting old users.'
+\echo 'Deleting old users in transaction.'
 
---DELETE FROM users
---WHERE id = ANY (:'old_user_ids');
+BEGIN;
+
+SELECT COUNT(*) AS all_users
+FROM users
+\gset
+
+DELETE FROM users
+WHERE id = ANY (:'old_user_ids');
 
 SELECT COUNT(*) AS remaining_old_users
 FROM users
 WHERE id = ANY (:'old_user_ids')
 \gset
+
+SELECT COUNT(*) AS remaining_all_users
+FROM users
+\gset
+
+\echo 'Total users before deletion: ':all_users
+\echo 'Total users after deletion: ':remaining_all_users
 \echo 'Remaining old users (should be 0): ':remaining_old_users
+\echo
+\echo 'Old user(s) deleted, but not committed. Do the above number look right? You sure?'
+\echo '==================================================='
+\echo 'Press ENTER to continue or Ctrl+C to abort and rollback changes.'
+\prompt confirm
+
+------------------------------------------------------------
+-- Commit deletion
+------------------------------------------------------------
+\echo
+\echo 'Committing deletion.'
+
+--ROLLBACK; -- Use ROLLBACK for safety during testing. Change to COMMIT when ready.
+COMMIT;
