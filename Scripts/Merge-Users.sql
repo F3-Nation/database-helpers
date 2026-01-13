@@ -251,8 +251,8 @@ ROLLBACK; -- Use ROLLBACK for safety during testing. Change to COMMIT when ready
 \echo
 \echo 'Deleting old users.'
 
-DELETE FROM users
-WHERE id = ANY (:'old_user_ids');
+--DELETE FROM users
+--WHERE id = ANY (:'old_user_ids');
 
 SELECT COUNT(*) AS remaining_old_users
 FROM users
