@@ -28,6 +28,21 @@
 \pset footer off
 
 ------------------------------------------------------------
+-- Set execution mode
+------------------------------------------------------------
+\if :{?commit}
+\else
+  \set commit false
+\endif
+
+\echo 'Execution mode:'
+\if :commit
+  \echo ' COMMIT (changes will be permanent)'
+\else
+  \echo ' DRY RUN (ROLLBACK only)'
+\endif
+
+------------------------------------------------------------
 -- Echo inputs and environment
 ------------------------------------------------------------
 \echo 
@@ -257,9 +272,16 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
 \echo
 \echo 'Above changes will be commited, then old users will be deleted. Delete action is taken separately in case unhandled references remain.'
 \echo '==================================================='
-\echo 'Press ENTER to continue or Ctrl+C to abort and rollback changes.'
-\prompt confirm
 
+------------------------------------------------------------
+-- Check execution mode
+------------------------------------------------------------
+\if :commit
+  \echo 'Press ENTER to COMMIT changes or Ctrl+C to abort'
+  \prompt confirm
+\else
+  \echo 'Dry run mode: no confirmation required'
+\endif
 
 ------------------------------------------------------------
 -- Commit changes
@@ -267,16 +289,23 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
 \echo
 \echo 'Committing changes.'
 
---ROLLBACK; -- Use ROLLBACK for safety during testing. Change to COMMIT when ready.
-COMMIT;
+------------------------------------------------------------
+-- Finalize transaction
+------------------------------------------------------------
+\echo
+\if :commit
+  \echo 'Committing changes.'
+  COMMIT;
+\else
+  \echo 'Dry run complete. Rolling back changes.'
+  ROLLBACK;
+\endif
 
 ------------------------------------------------------------
 -- Delete old users
 ------------------------------------------------------------
 \echo
-\echo 'Deleting old users in transaction.'
-
-BEGIN;
+\echo 'Deleting old users.'
 
 SELECT COUNT(*) AS all_users
 FROM users

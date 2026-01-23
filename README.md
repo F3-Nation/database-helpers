@@ -79,6 +79,7 @@ You can feed psql a script and input arguments. And, the script can be interacti
 ```
 psql service=staging \
      -v old_org=123 -v new_org=456 \
+     -v commit=[false|true] \
      -f Scripts/Merge-Aos.sql
 ```
 
