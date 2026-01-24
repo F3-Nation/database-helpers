@@ -75,22 +75,62 @@
 \echo '==================================================='
 \echo 'Inputs:'
 
-SELECT string_to_array(:'old_emails', ',') AS old_email_array
-\gset
-
 SELECT
     current_database()          AS database,
     :'old_emails'          AS old_emails,
     :'new_email'                AS new_email;
 
+------------------------------------------------------------
+-- Fetch User records for old emails
+------------------------------------------------------------
+
 SELECT string_to_array(:'old_emails', ',') AS old_email_array
 \gset
 \echo 'Old emails converted to an array: ':old_email_array
+
+SELECT array_length(string_to_array(:'old_emails', ','), 1) AS old_email_input_count
+\gset
+
+SELECT COUNT(*) AS old_user_match_count
+FROM users
+WHERE email = ANY (string_to_array(:'old_emails', ','))
+\gset
+
+SELECT
+  (array_length(string_to_array(:'old_emails', ','), 1)
+   = COUNT(*)) AS email_match_ok
+FROM users
+WHERE email = ANY (string_to_array(:'old_emails', ','))
+\gset
+
+\if :email_match_ok
+\else
+  \echo 'ERROR: Mismatch between old emails input and users found.'
+  \echo '  Old emails input : ':old_email_input_count
+  \echo '  Users found count  : ':old_user_match_count
+  \quit
+\endif
 
 SELECT array_agg(id) AS old_user_ids
 FROM users
 WHERE email = ANY (:'old_email_array')
 \gset
+
+------------------------------------------------------------
+-- Fetch User record for new email (must be exactly one row)
+------------------------------------------------------------
+
+SELECT COUNT(*) AS new_user_count
+FROM users
+WHERE email = :'new_email'
+\gset
+
+\if :new_user_count = 1
+\else
+  \echo 'ERROR: Expected exactly 1 user for new_email = ' :new_email
+  \echo '       Found ' :new_user_count
+  \quit
+\endif
 
 SELECT id AS new_user_id
 FROM users
