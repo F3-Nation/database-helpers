@@ -120,12 +120,17 @@ WHERE email = ANY (:'old_email_array')
 -- Fetch User record for new email (must be exactly one row)
 ------------------------------------------------------------
 
+SELECT COUNT(*)=1 AS one_new_user_found
+FROM users
+WHERE email = :'new_email'
+\gset
+
 SELECT COUNT(*) AS new_user_count
 FROM users
 WHERE email = :'new_email'
 \gset
 
-\if :new_user_count = 1
+\if :one_new_user_found
 \else
   \echo 'ERROR: Expected exactly 1 user for new_email = ' :new_email
   \echo '       Found ' :new_user_count
