@@ -1,0 +1,8 @@
+temp/
+venv/
+.venv/
+ENV/
+env/
+__pycache__/
+.env*
+!.env.example

@@ -1,0 +1,31 @@
+# Backblast Import
+
+**THIS IS NOT FOR PAXMINER DATA.** PAXminer data will automatically be imported to the new F3 database when you migrate. This is for data that you maintained in a spreadsheet or region database.
+
+You have to provide the data in a very specific format in order to get it imported.
+
+It has to be a csv file. There has to be 1 row per PAX per workout. Example: if you had 3 guys at your first workout and 8 guys at your 2nd workout, there should be 11 rows.
+
+## Backblast Import CSV Columns
+
+The following table explains the columns required in the `posts_to_import.sample.csv` file for importing backblasts and attendance. Column names have to be exact (case-sensative).
+
+| Column         | Required? | Description                                                      | Source/How to Obtain                    |
+|---------------|-----------|------------------------------------------------------------------|------------------------------------------|
+| org_id        | **Yes**   | Database ID (integer) of the AO.                                 | https://map.f3nation.com/admin/aos       |
+| location_id   | **Yes**   | Database ID (integer) of the Location.                           | https://map.f3nation.com/admin/locations |
+| series_id     | No        | Database ID (integer) of the Event (if there is one)             | https://map.f3nation.com/admin/workouts  |
+| start_date    | **Yes**   | Date of the event (YYYY-MM-DD)                                   |                                          |
+| start_time    | No        | Start time of the event (HHMM, 24hr, e.g., 0530 for 5:30am)      |                                          |
+| name          | No        | Name/title of the event (Defaults to AO name)                    |                                          |
+| description   | No        | Description of the event (You most likely don't have one)        |                                          |
+| backblast     | No        | Backblast text (detailed workout notes)                          |                                          |
+| user_id       | **Yes**   | Database ID (integer) of the PAX that attended or Q'd            | https://map.f3nation.com/admin/users/all |
+| post_type     | No        | Q, Co-Q, or nothing*                                             |                                          |
+
+**Notes:**
+ 
+- If `post_type` is Q (case sensative), it will log that PAX as having Q'd
+- If `post_type` is Co-Q (case sensative), it will log that PAX as having Co-Q'd
+- If `post_type` has anything other than Q or Co-Q (case sensative), it will log that PAX as a normal post.
+- `org_id`, `location_id`, `series_id`, and `user_id` need to be integers that exist in the F3 Nation database (as visualized in the Admin portal). Prior to import, the script will ensure they all exist. If they don't, the import will not run. If you need help finding IDs - or if you need a database export to help you match IDs, talk to a Nation Admin.

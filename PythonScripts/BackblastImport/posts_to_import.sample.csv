@@ -1,0 +1,9 @@
+org_id,location_id,series_id,start_date,start_time,name,description,backblast,user_id,post_type
+37004,123,567,2024-06-01,0530,First Post,This is the first post.,"bob had us, and them, do merkins",1,Q
+37004,123,567,2024-06-01,0530,First Post,This is the first post.,"bob had us, and them, do merkins",2,Co-Q
+37004,123,567,2024-06-01,0530,First Post,This is the first post.,"bob had us, and them, do merkins",3,
+37004,123,567,2024-06-01,0530,First Post,This is the first post.,"bob had us, and them, do merkins",4,
+37004,123,,2024-06-08,,Second Post,This is the second post.,,3,Q
+37004,123,,2024-06-08,,Second Post,This is the second post.,,1,
+37004,123,,2024-06-08,,Second Post,This is the second post.,,5,
+37004,123,,2024-06-08,,Second Post,This is the second post.,,7,
