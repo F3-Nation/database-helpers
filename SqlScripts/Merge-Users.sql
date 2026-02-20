@@ -13,11 +13,11 @@
 --    Pass a comma-separated list of emails. The script will
 --    convert it into an array and use `= ANY(array)` in queries.
 --
---    psql service=staging -f Scripts/Merge-Users.sql \
+--    psql service=staging -f SqlScripts/Merge-Users.sql \
 --      -v new_email='bob@gmail.com' \
 --      -v old_emails='bob@yahoo.com,bob@msn.com'
 --
---    psql service=staging -f Scripts/Merge-Users.sql \
+--    psql service=staging -f SqlScripts/Merge-Users.sql \
 --      -v new_email='bob@gmail.com' \
 --      -v old_emails='bob@yahoo.com'
 --

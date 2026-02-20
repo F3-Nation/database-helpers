@@ -9,7 +9,7 @@
 --
 -- Examples:
 --
---    psql service=staging -f Scripts/Merge-EventTypes.sql \
+--    psql service=staging -f SqlScripts/Merge-EventTypes.sql \
 --      -v from=123 -v into=456
 --
 -- ============================================================

@@ -1,3 +1,21 @@
+-- ============================================================
+-- Merge-Aos.sql
+--
+-- Help / Usage
+--
+-- This script merges two organization (AOs) records by taking an `old_org` ID and a `new_org` ID, then remaps/deletes related rows to consolidate everything under the `new_org`.
+--
+-- Examples:
+--
+--    psql service=prod -f SqlScripts/Merge-Aos.sql \
+--      -v new_org=123 \
+--      -v old_org=456
+--
+--    psql service=staging -f SqlScripts/Merge-Aos.sql \
+--      -v new_org=789 \
+--      -v old_org=101
+--
+-- ============================================================
 \set ON_ERROR_STOP on
 \set QUIET on
 \pset footer off
