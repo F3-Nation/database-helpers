@@ -6,6 +6,35 @@ You have to provide the data in a very specific format in order to get it import
 
 It has to be a csv file. There has to be 1 row per PAX per workout. Example: if you had 3 guys at your first workout and 8 guys at your 2nd workout, there should be 11 rows.
 
+## Usage
+
+**The CSV file path is required.**
+
+```bash
+# Dry-run mode against staging (validates and shows what would be imported, then rolls back)
+python import_backblasts.py --input_csv /path/to/harrisburg_backblasts.csv
+
+# Dry-run mode for production environment with custom CSV
+python import_backblasts.py --input_csv harrisburg_backblasts.csv --environment prod
+
+# Commit changes to staging database
+python import_backblasts.py --input_csv harrisburg_backblasts.csv --commit
+
+# Commit changes to production database
+python import_backblasts.py --input_csv harrisburg_backblasts.csv --environment prod --commit
+
+# Custom log file
+python import_backblasts.py --input_csv harrisburg_backblasts.csv --log_file backblast_import.log
+```
+
+**Arguments:**
+- `--input_csv` (REQUIRED) - Path to CSV file
+- `--environment` - `staging` or `prod` (defaults to `staging`)
+- `--commit` - Commit changes to database (defaults to dry-run with rollback)
+- `--log_file` - Path to log file (defaults to `import_backblasts.log`)
+
+By default, the script runs in **dry-run mode** with automatic rollback. Use the `--commit` flag to actually persist changes to the database. This allows you to validate your data and see any errors before making permanent changes.
+
 ## Backblast Import CSV Columns
 
 The following table explains the columns required in the `posts_to_import.sample.csv` file for importing backblasts and attendance. Column names have to be exact (case-sensative).
@@ -29,3 +58,6 @@ The following table explains the columns required in the `posts_to_import.sample
 - If `post_type` is Co-Q (case sensative), it will log that PAX as having Co-Q'd
 - If `post_type` has anything other than Q or Co-Q (case sensative), it will log that PAX as a normal post.
 - `org_id`, `location_id`, `series_id`, and `user_id` need to be integers that exist in the F3 Nation database (as visualized in the Admin portal). Prior to import, the script will ensure they all exist. If they don't, the import will not run. If you need help finding IDs - or if you need a database export to help you match IDs, talk to a Nation Admin.
+- An Event will be determined by a unique combination of `org_id`, `location_id`, `series_id`, `start_date`, `start_time`, `name`, `description`, `backblast`. If any of these fields differ, the import will treat is as 2 different events.
+- Each PAX may only be on an event once. I.e., do not list them as Q and later with no post_type for the same event. The import will not run if there are any duplicates.
+- There must be 1 and only 1 Q per event
