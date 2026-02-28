@@ -228,7 +228,7 @@ def check_q_per_event(rows):
     return events_no_q, events_multi_q
 
 
-def insert_event_instances(cur, rows):
+def insert_event_instances(cur, rows, id_tracker):
     """Insert unique events and return a mapping from (org_id, location_id, series_id, start_date, start_time, name, description, backblast) to new event_instance id."""
     event_keys = set()
     for row in rows:
@@ -275,12 +275,13 @@ def insert_event_instances(cur, rows):
         )
         event_id = cur.fetchone()[0]
         event_map[key] = event_id
+        id_tracker['event_instance_ids'].append(event_id)
         print(f"      -> event_instance_id: {event_id}")
     
     return event_map
 
 
-def insert_attendance(cur, rows, event_map):
+def insert_attendance(cur, rows, event_map, id_tracker):
     """Insert attendance rows and return a mapping from (event_instance_id, user_id) to attendance id."""
     attendance_map = {}
     
@@ -310,14 +311,53 @@ def insert_attendance(cur, rows, event_map):
         )
         attendance_id = cur.fetchone()[0]
         attendance_map[(event_instance_id, user_id)] = attendance_id
+        id_tracker['attendance_ids'].append(attendance_id)
     
     return attendance_map
 
 
-def insert_attendance_x_types(cur, rows, event_map, attendance_map):
+def generate_backout_sql(id_tracker, csv_file, env):
+    """Generate a SQL file with DELETE commands to rollback the import."""
+    # Determine output path
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    sql_file = f'backout_{env}_{timestamp}.sql'
+    
+    with open(sql_file, 'w', encoding='utf-8') as f:
+        f.write(f"-- Backout SQL for import from {csv_file}\n")
+        f.write(f"-- Generated: {datetime.utcnow().isoformat()}Z\n")
+        f.write(f"-- Environment: {env}\n")
+        f.write(f"-- This file will rollback all inserted data\n\n")
+        
+        # Delete in reverse order of insertion to respect foreign keys
+        if id_tracker['attendance_with_types']:
+            f.write("-- Delete attendance_x_attendance_types records\n")
+            attendance_with_types_str = ','.join(str(id) for id in id_tracker['attendance_with_types'])
+            f.write(f"DELETE FROM attendance_x_attendance_types WHERE attendance_id IN ({attendance_with_types_str});\n\n")
+        
+        if id_tracker['attendance_ids']:
+            f.write("-- Delete attendance records\n")
+            attendance_ids_str = ','.join(str(id) for id in id_tracker['attendance_ids'])
+            f.write(f"DELETE FROM attendance WHERE id IN ({attendance_ids_str});\n\n")
+        
+        if id_tracker['event_instance_ids']:
+            f.write("-- Delete event_instances records\n")
+            event_instance_ids_str = ','.join(str(id) for id in id_tracker['event_instance_ids'])
+            f.write(f"DELETE FROM event_instances WHERE id IN ({event_instance_ids_str});\n\n")
+        
+        f.write("-- Summary of deleted records\n")
+        f.write(f"-- Event instances deleted: {len(id_tracker['event_instance_ids'])}\n")
+        f.write(f"-- Attendance records deleted: {len(id_tracker['attendance_ids'])}\n")
+        f.write(f"-- Attendance type assignments deleted: {len(id_tracker['attendance_with_types'])}\n")
+    
+    return sql_file
+
+
+
+def insert_attendance_x_types(cur, rows, event_map, attendance_map, id_tracker):
     """Insert attendance_x_attendance_types rows for Q/Co-Q types."""
     q_count = 0
     coq_count = 0
+    attendance_with_types = set()
     
     for row in rows:
         post_type = row.get('post_type', '')
@@ -336,6 +376,7 @@ def insert_attendance_x_types(cur, rows, event_map, attendance_map):
             attendance_key = (event_instance_id, row['user_id'])
             if attendance_key in attendance_map:
                 attendance_id = attendance_map[attendance_key]
+                attendance_with_types.add(attendance_id)
                 
                 # Map post_type to attendance_type_id
                 attendance_type_id = 1 if post_type == 'Q' else 2  # Example: 1=Q, 2=Co-Q
@@ -350,11 +391,21 @@ def insert_attendance_x_types(cur, rows, event_map, attendance_map):
                     q_count += 1
                 else:
                     coq_count += 1
+    
+    # Store attendance_ids that had types assigned for backout
+    id_tracker['attendance_with_types'] = list(attendance_with_types)
     return q_count, coq_count
 
 def main():
     # Ensure CSV_FILE is not None (should be caught earlier, but satisfies type checker)
     assert CSV_FILE is not None, "CSV_FILE must be provided"
+    
+    # ID tracking for backout
+    id_tracker = {
+        'event_instance_ids': [],
+        'attendance_ids': [],
+        'attendance_with_types': []
+    }
     
     # Performance tracking
     timers = {}
@@ -456,21 +507,37 @@ def main():
 
         # Insert event_instances
         start_events = time.time()
-        event_map = insert_event_instances(cur, rows)
+        event_map = insert_event_instances(cur, rows, id_tracker)
         timers['event_instances'] = time.time() - start_events
         
         # Insert attendance
         start_attendance = time.time()
-        attendance_map = insert_attendance(cur, rows, event_map)
+        attendance_map = insert_attendance(cur, rows, event_map, id_tracker)
         timers['attendance'] = time.time() - start_attendance
         
         # Insert attendance_x_types
         print(f"\n[ATTENDANCE TYPES] Processing Q/Co-Q assignments:")
         start_types = time.time()
-        q_count, coq_count = insert_attendance_x_types(cur, rows, event_map, attendance_map)
+        q_count, coq_count = insert_attendance_x_types(cur, rows, event_map, attendance_map, id_tracker)
         timers['attendance_types'] = time.time() - start_types
         print(f"  ✓ Created {q_count} Q assignment(s), {coq_count} Co-Q assignment(s)")
 
+        # Calculate summary statistics
+        org_ids = set()
+        location_ids = set()
+        event_dates = []
+        
+        for event_key in event_map.keys():
+            org_id, location_id, series_id, start_date, start_time, name, description, backblast = event_key
+            org_ids.add(org_id)
+            location_ids.add(location_id)
+            event_dates.append(start_date)
+        
+        oldest_date = min(event_dates) if event_dates else "N/A"
+        newest_date = max(event_dates) if event_dates else "N/A"
+        unique_orgs = len(org_ids)
+        unique_locations = len(location_ids)
+        
         # Print summary
         print("\n" + "=" * 80)
         print("IMPORT SUMMARY")
@@ -480,6 +547,10 @@ def main():
         print(f"Attendance records created: {len(attendance_map)}")
         print(f"Q assignments: {q_count}")
         print(f"Co-Q assignments: {coq_count}")
+        print(f"Unique organizations: {unique_orgs}")
+        print(f"Unique locations: {unique_locations}")
+        print(f"Oldest event date: {oldest_date}")
+        print(f"Most recent event date: {newest_date}")
         print("\n" + "PERFORMANCE METRICS")
         print("-" * 80)
         print(f"Ingest & Validate:    {timers['ingest_and_validate']:8.2f}s")
@@ -505,6 +576,12 @@ def main():
     finally:
         cur.close()
         conn.close()
+        
+        # Generate backout SQL file
+        backout_file = generate_backout_sql(id_tracker, CSV_FILE, ENV)
+        print(f"\n[BACKOUT] SQL rollback file generated: {backout_file}")
+        print(f"  To rollback this import, execute: psql -f {backout_file}")
+        
         # Restore original stdout/stderr before closing log file
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__

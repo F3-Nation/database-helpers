@@ -35,6 +35,44 @@ python import_backblasts.py --input_csv harrisburg_backblasts.csv --log_file bac
 
 By default, the script runs in **dry-run mode** with automatic rollback. Use the `--commit` flag to actually persist changes to the database. This allows you to validate your data and see any errors before making permanent changes.
 
+## Import Summary & Backout Plan
+
+After each import run (successful or failed), the script generates two important artifacts:
+
+### 1. Detailed Import Summary
+The log file shows a comprehensive summary at the end:
+```
+================================================================================
+IMPORT SUMMARY
+================================================================================
+Total rows processed: 1995
+Unique events created: 686
+Attendance records created: 1995
+Q assignments: 686
+Co-Q assignments: 5
+Unique organizations: 5
+Unique locations: 5
+Oldest event date: 2021-04-01
+Most recent event date: 2023-12-30
+```
+
+This helps you quickly verify the scope of your import including date ranges and geographic distribution.
+
+### 2. Automatic SQL Backout File
+A timestamped SQL rollback script is automatically generated in the same directory (e.g., `backout_prod_20260228_031233.sql`). This file contains all the SQL DELETE commands needed to completely remove the imported data if something goes wrong:
+
+```bash
+# To rollback an import, simply execute:
+psql -f backout_prod_20260228_031233.sql
+```
+
+**Important:** The backout file is generated:
+- ✓ On successful imports (after committed)
+- ✓ On failed imports (with whatever data was inserted before the failure)
+- ✓ On dry-run tests (with the would-be deleted data)
+
+This allows you to safely test and commit imports knowing you can always roll back if needed.
+
 ## Backblast Import CSV Columns
 
 The following table explains the columns required in the `posts_to_import.sample.csv` file for importing backblasts and attendance. Column names have to be exact (case-sensative).
