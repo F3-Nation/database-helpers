@@ -316,6 +316,29 @@ def insert_attendance(cur, rows, event_map, id_tracker):
     return attendance_map
 
 
+def update_event_pax_counts(cur, event_instance_ids):
+    """Update pax_count for event instances based on attendance record count."""
+    if not event_instance_ids:
+        return
+    
+    print(f"\n[PAX COUNT] Updating pax_count for {len(event_instance_ids)} event instance(s)...")
+    
+    cur.execute(
+        """
+        UPDATE event_instances ei
+        SET pax_count = (
+            SELECT COUNT(a.id)
+            FROM attendance a
+            WHERE a.event_instance_id = ei.id
+        )
+        WHERE ei.id = ANY(%s)
+        """,
+        (event_instance_ids,)
+    )
+    
+    print(f"  ✓ Updated {cur.rowcount} event instance(s) with pax counts")
+
+
 def generate_backout_sql(id_tracker, csv_file, env):
     """Generate a SQL file with DELETE commands to rollback the import."""
     # Determine output path
@@ -515,6 +538,11 @@ def main():
         attendance_map = insert_attendance(cur, rows, event_map, id_tracker)
         timers['attendance'] = time.time() - start_attendance
         
+        # Update event pax_count
+        start_pax = time.time()
+        update_event_pax_counts(cur, id_tracker['event_instance_ids'])
+        timers['pax_count'] = time.time() - start_pax
+        
         # Insert attendance_x_types
         print(f"\n[ATTENDANCE TYPES] Processing Q/Co-Q assignments:")
         start_types = time.time()
@@ -556,6 +584,7 @@ def main():
         print(f"Ingest & Validate:    {timers['ingest_and_validate']:8.2f}s")
         print(f"Event Instances:      {timers['event_instances']:8.2f}s")
         print(f"Attendance:           {timers['attendance']:8.2f}s")
+        print(f"Pax Counts:           {timers['pax_count']:8.2f}s")
         print(f"Attendance Types:     {timers['attendance_types']:8.2f}s")
         print(f"TOTAL:                {time.time() - start_total:8.2f}s")
         print("=" * 80)
