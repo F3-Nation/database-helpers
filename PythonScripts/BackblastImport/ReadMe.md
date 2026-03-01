@@ -6,7 +6,34 @@ You have to provide the data in a very specific format in order to get it import
 
 It has to be a csv file. There has to be 1 row per PAX per workout. Example: if you had 3 guys at your first workout and 8 guys at your 2nd workout, there should be 11 rows.
 
-## Usage
+## For the PAX building the import spreadsheet
+
+The following table explains the columns required in the `posts_to_import.sample.csv` file for importing backblasts and attendance. Column names have to be exact (case-sensative).
+
+| Column         | Required? | Description                                                      | Source/How to Obtain                    |
+|---------------|-----------|------------------------------------------------------------------|------------------------------------------|
+| org_id        | **Yes**   | Database ID (integer) of the AO.                                 | https://map.f3nation.com/admin/aos       |
+| location_id   | **Yes**   | Database ID (integer) of the Location.                           | https://map.f3nation.com/admin/locations |
+| series_id     | No        | Database ID (integer) of the Event (if there is one)             | https://map.f3nation.com/admin/workouts  |
+| start_date    | **Yes**   | Date of the event (YYYY-MM-DD)                                   |                                          |
+| start_time    | No        | Start time of the event (HHMM, 24hr, e.g., 0530 for 5:30am)      |                                          |
+| name          | No        | Name/title of the event (Defaults to AO name)                    |                                          |
+| description   | No        | Description of the event (You most likely don't have one)        |                                          |
+| backblast     | No        | Backblast text (detailed workout notes)                          |                                          |
+| user_id       | **Yes**   | Database ID (integer) of the PAX that attended or Q'd            | https://map.f3nation.com/admin/users/all |
+| post_type     | No        | Q, Co-Q, or nothing*                                             |                                          |
+
+**Notes:**
+ 
+- If `post_type` is Q (case sensative), it will log that PAX as having Q'd
+- If `post_type` is Co-Q (case sensative), it will log that PAX as having Co-Q'd
+- If `post_type` has anything other than Q or Co-Q (case sensative), it will log that PAX as a normal post.
+- `org_id`, `location_id`, `series_id`, and `user_id` need to be integers that exist in the F3 Nation database (as visualized in the Admin portal). Prior to import, the script will ensure they all exist. If they don't, the import will not run. If you need help finding IDs - or if you need a database export to help you match IDs, talk to a Nation Admin.
+- An Event will be determined by a unique combination of `org_id`, `location_id`, `series_id`, `start_date`, `start_time`, `name`, `description`, `backblast`. If any of these fields differ, the import will treat is as 2 different events.
+- Each PAX may only be on an event once. I.e., do not list them as Q and later with no post_type for the same event. The import will not run if there are any duplicates.
+- There must be 1 and only 1 Q per event
+
+## For the Admin doing the import
 
 **The CSV file path is required.**
 
@@ -72,30 +99,3 @@ psql -f backout_prod_20260228_031233.sql
 - ✓ On dry-run tests (with the would-be deleted data)
 
 This allows you to safely test and commit imports knowing you can always roll back if needed.
-
-## Backblast Import CSV Columns
-
-The following table explains the columns required in the `posts_to_import.sample.csv` file for importing backblasts and attendance. Column names have to be exact (case-sensative).
-
-| Column         | Required? | Description                                                      | Source/How to Obtain                    |
-|---------------|-----------|------------------------------------------------------------------|------------------------------------------|
-| org_id        | **Yes**   | Database ID (integer) of the AO.                                 | https://map.f3nation.com/admin/aos       |
-| location_id   | **Yes**   | Database ID (integer) of the Location.                           | https://map.f3nation.com/admin/locations |
-| series_id     | No        | Database ID (integer) of the Event (if there is one)             | https://map.f3nation.com/admin/workouts  |
-| start_date    | **Yes**   | Date of the event (YYYY-MM-DD)                                   |                                          |
-| start_time    | No        | Start time of the event (HHMM, 24hr, e.g., 0530 for 5:30am)      |                                          |
-| name          | No        | Name/title of the event (Defaults to AO name)                    |                                          |
-| description   | No        | Description of the event (You most likely don't have one)        |                                          |
-| backblast     | No        | Backblast text (detailed workout notes)                          |                                          |
-| user_id       | **Yes**   | Database ID (integer) of the PAX that attended or Q'd            | https://map.f3nation.com/admin/users/all |
-| post_type     | No        | Q, Co-Q, or nothing*                                             |                                          |
-
-**Notes:**
- 
-- If `post_type` is Q (case sensative), it will log that PAX as having Q'd
-- If `post_type` is Co-Q (case sensative), it will log that PAX as having Co-Q'd
-- If `post_type` has anything other than Q or Co-Q (case sensative), it will log that PAX as a normal post.
-- `org_id`, `location_id`, `series_id`, and `user_id` need to be integers that exist in the F3 Nation database (as visualized in the Admin portal). Prior to import, the script will ensure they all exist. If they don't, the import will not run. If you need help finding IDs - or if you need a database export to help you match IDs, talk to a Nation Admin.
-- An Event will be determined by a unique combination of `org_id`, `location_id`, `series_id`, `start_date`, `start_time`, `name`, `description`, `backblast`. If any of these fields differ, the import will treat is as 2 different events.
-- Each PAX may only be on an event once. I.e., do not list them as Q and later with no post_type for the same event. The import will not run if there are any duplicates.
-- There must be 1 and only 1 Q per event

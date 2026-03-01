@@ -5,7 +5,7 @@ import psycopg2
 from psycopg2.extras import execute_batch
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Required columns
@@ -44,7 +44,7 @@ CSV_FILE = args.input_csv
 LOG_FILE = args.log_file
 
 log_handle = open(LOG_FILE, 'w', encoding='utf-8')
-log_handle.write(f"Log started: {datetime.utcnow().isoformat()}Z\n")
+log_handle.write(f"Log started: {datetime.now(timezone.utc).isoformat()}Z\n")
 log_handle.flush()
 sys.stdout = TeeStream(sys.stdout, log_handle)
 sys.stderr = TeeStream(sys.stderr, log_handle)
@@ -61,6 +61,19 @@ DB_CONFIG = {
     'user': os.environ['PG_USER'],
     'password': os.environ['PG_PASSWORD']
 }
+
+def enrich_rows_with_event_keys(rows):
+    """Add event_key to each row for consistent key building throughout the script."""
+    for row in rows:
+        name = row.get('name', '').strip() or 'Imported Event'
+        description = row.get('description', '').strip()
+        row['_event_key'] = (
+            row['org_id'], row['location_id'], row.get('series_id', ''),
+            row['start_date'], row.get('start_time', ''), name,
+            description, row.get('backblast', '')
+        )
+    return rows
+
 
 def validate_row(row):
     """Ensure required fields are present and not empty."""
@@ -178,16 +191,7 @@ def check_q_per_event(rows):
     events_q_count = {}  # Maps event key -> list of (row_idx, user_id) with post_type='Q'
     
     for row_idx, row in enumerate(rows, 1):
-        event_key = (
-            row['org_id'],
-            row['location_id'],
-            row.get('series_id', ''),
-            row['start_date'],
-            row.get('start_time', ''),
-            row.get('name', '').strip() or 'Imported Event',
-            row.get('description', '').strip(),
-            row.get('backblast', '')
-        )
+        event_key = row['_event_key']
         
         if event_key not in events_q_count:
             events_q_count[event_key] = []
@@ -232,21 +236,21 @@ def insert_event_instances(cur, rows, id_tracker):
     """Insert unique events and return a mapping from (org_id, location_id, series_id, start_date, start_time, name, description, backblast) to new event_instance id."""
     event_keys = set()
     for row in rows:
-        name = row.get('name', '').strip() or 'Imported Event'
-        description = row.get('description', '').strip()
-        key = (
-            row['org_id'], row['location_id'], row.get('series_id', ''),
-            row['start_date'], row.get('start_time', ''), name,
-            description, row.get('backblast', '')
-        )
+        key = row['_event_key']
         event_keys.add(key)
+    
+    # Calculate pax_count for each event by counting matching rows
+    pax_counts = {}
+    for key in event_keys:
+        pax_counts[key] = sum(1 for row in rows if row['_event_key'] == key)
 
     print(f"\n[EVENT INSTANCES] Found {len(event_keys)} unique event(s) to create:")
     
     event_map = {}
     for i, key in enumerate(event_keys, 1):
         org_id, location_id, series_id, start_date, start_time, name, description, backblast = key
-        print(f"  [{i}] org_id={org_id}, location_id={location_id}, series_id={series_id or 'None'}, date={start_date}, time={start_time or 'N/A'}, name={name or 'N/A'}")
+        pax_count = pax_counts[key]
+        print(f"  [{i}] org_id={org_id}, location_id={location_id}, series_id={series_id or 'None'}, date={start_date}, time={start_time or 'N/A'}, name={name or 'N/A'}, pax_count={pax_count}")
         if description:
             print(f"      description: {description[:100]}{'...' if len(description) > 100 else ''}")
         if backblast:
@@ -255,9 +259,9 @@ def insert_event_instances(cur, rows, id_tracker):
         cur.execute(
             """
             INSERT INTO event_instances (
-                org_id, location_id, series_id, is_active, highlight, start_date, start_time, name, description, backblast
+                org_id, location_id, series_id, is_active, highlight, start_date, start_time, name, description, backblast, pax_count
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -271,6 +275,7 @@ def insert_event_instances(cur, rows, id_tracker):
                 name,
                 description if description else None,
                 backblast if backblast else None,
+                pax_count,
             )
         )
         event_id = cur.fetchone()[0]
@@ -288,13 +293,7 @@ def insert_attendance(cur, rows, event_map, id_tracker):
     print(f"\n[ATTENDANCE] Creating {len(rows)} attendance record(s):")
     
     for i, row in enumerate(rows, 1):
-        name = row.get('name', '').strip() or 'Imported Event'
-        description = row.get('description', '').strip()
-        key = (
-            row['org_id'], row['location_id'], row.get('series_id', ''),
-            row['start_date'], row.get('start_time', ''), name,
-            description, row.get('backblast', '')
-        )
+        key = row['_event_key']
         event_instance_id = event_map[key]
         user_id = row['user_id']
         post_type = row.get('post_type', '')
@@ -316,38 +315,18 @@ def insert_attendance(cur, rows, event_map, id_tracker):
     return attendance_map
 
 
-def update_event_pax_counts(cur, event_instance_ids):
-    """Update pax_count for event instances based on attendance record count."""
-    if not event_instance_ids:
-        return
-    
-    print(f"\n[PAX COUNT] Updating pax_count for {len(event_instance_ids)} event instance(s)...")
-    
-    cur.execute(
-        """
-        UPDATE event_instances ei
-        SET pax_count = (
-            SELECT COUNT(a.id)
-            FROM attendance a
-            WHERE a.event_instance_id = ei.id
-        )
-        WHERE ei.id = ANY(%s)
-        """,
-        (event_instance_ids,)
-    )
-    
-    print(f"  ✓ Updated {cur.rowcount} event instance(s) with pax counts")
+
 
 
 def generate_backout_sql(id_tracker, csv_file, env):
     """Generate a SQL file with DELETE commands to rollback the import."""
     # Determine output path
-    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     sql_file = f'backout_{env}_{timestamp}.sql'
     
     with open(sql_file, 'w', encoding='utf-8') as f:
         f.write(f"-- Backout SQL for import from {csv_file}\n")
-        f.write(f"-- Generated: {datetime.utcnow().isoformat()}Z\n")
+        f.write(f"-- Generated: {datetime.now(timezone.utc).isoformat()}Z\n")
         f.write(f"-- Environment: {env}\n")
         f.write(f"-- This file will rollback all inserted data\n\n")
         
@@ -386,13 +365,7 @@ def insert_attendance_x_types(cur, rows, event_map, attendance_map, id_tracker):
         post_type = row.get('post_type', '')
         if post_type in ('Q', 'Co-Q'):
             # Get the event key to look up event_instance_id
-            name = row.get('name', '').strip() or 'Imported Event'
-            description = row.get('description', '').strip()
-            event_key = (
-                row['org_id'], row['location_id'], row.get('series_id', ''),
-                row['start_date'], row.get('start_time', ''), name,
-                description, row.get('backblast', '')
-            )
+            event_key = row['_event_key']
             event_instance_id = event_map[event_key]
             
             # Look up the attendance_id
@@ -402,7 +375,7 @@ def insert_attendance_x_types(cur, rows, event_map, attendance_map, id_tracker):
                 attendance_with_types.add(attendance_id)
                 
                 # Map post_type to attendance_type_id
-                attendance_type_id = 1 if post_type == 'Q' else 2  # Example: 1=Q, 2=Co-Q
+                attendance_type_id = 2 if post_type == 'Q' else 3  # Example: 2=Q, 3=Co-Q
                 print(f"  [ATTENDANCE TYPES] user_id={row['user_id']}, type={post_type}, attendance_type_id={attendance_type_id}")
                 
                 cur.execute(
@@ -453,6 +426,9 @@ def main():
         rows = list(reader)
     
     print(f"\n[CSV] Loaded {len(rows)} row(s) from {CSV_FILE}")
+    
+    # Enrich rows with event keys for consistent use throughout
+    enrich_rows_with_event_keys(rows)
 
     # Validate
     print(f"\n[VALIDATION] Validating {len(rows)} row(s)...")
@@ -538,11 +514,6 @@ def main():
         attendance_map = insert_attendance(cur, rows, event_map, id_tracker)
         timers['attendance'] = time.time() - start_attendance
         
-        # Update event pax_count
-        start_pax = time.time()
-        update_event_pax_counts(cur, id_tracker['event_instance_ids'])
-        timers['pax_count'] = time.time() - start_pax
-        
         # Insert attendance_x_types
         print(f"\n[ATTENDANCE TYPES] Processing Q/Co-Q assignments:")
         start_types = time.time()
@@ -584,7 +555,6 @@ def main():
         print(f"Ingest & Validate:    {timers['ingest_and_validate']:8.2f}s")
         print(f"Event Instances:      {timers['event_instances']:8.2f}s")
         print(f"Attendance:           {timers['attendance']:8.2f}s")
-        print(f"Pax Counts:           {timers['pax_count']:8.2f}s")
         print(f"Attendance Types:     {timers['attendance_types']:8.2f}s")
         print(f"TOTAL:                {time.time() - start_total:8.2f}s")
         print("=" * 80)
