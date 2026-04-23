@@ -220,11 +220,11 @@ WHERE user_id = ANY (:'old_user_ids')
 \echo 'Remaining role mappings for old user IDs (should be 0): ':remaining_old_role_mappings
 
 ------------------------------------------------------------
--- Update permission mappings
+-- Update position mappings
 ------------------------------------------------------------
 \echo
 \echo '==================================================='
-\echo 'Updating permission mappings to new user ID'
+\echo 'Updating position mappings to new user ID'
 
 select u.f3_name, o."name" as org, o."org_type" , p."name"
 from positions_x_orgs_x_users pou
@@ -237,11 +237,11 @@ UPDATE positions_x_orgs_x_users
 SET user_id = :'new_user_id'
 WHERE user_id = ANY (:'old_user_ids');
 
-SELECT COUNT(*) AS remaining_old_permission_mappings
+SELECT COUNT(*) AS remaining_old_position_mappings
 FROM positions_x_orgs_x_users
 WHERE user_id = ANY (:'old_user_ids')
 \gset
-\echo 'Remaining permission mappings for old user IDs (should be 0): ':remaining_old_permission_mappings
+\echo 'Remaining position mappings for old user IDs (should be 0): ':remaining_old_position_mappings
 
 ------------------------------------------------------------
 -- Update achievements
