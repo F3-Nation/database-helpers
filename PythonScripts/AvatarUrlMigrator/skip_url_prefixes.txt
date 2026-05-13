@@ -1,0 +1,5 @@
+# Optional skip prefixes (one per line). URLs matching these prefixes are skipped.
+# Blank lines and lines starting with # are ignored.
+
+# Example:
+# https://storage.googleapis.com/f3-public-images/user-avatars/

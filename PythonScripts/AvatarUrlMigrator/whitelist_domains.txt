@@ -1,0 +1,6 @@
+# One domain per line. Blank lines and lines starting with # are ignored.
+# You can also place comma-separated domains on a single line.
+# Leave this file empty for no whitelist defaults.
+# Example:
+# storage.googleapis.com
+# f3-public-images.storage.googleapis.com

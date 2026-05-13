@@ -84,23 +84,28 @@ SELECT
 -- Fetch User records for old emails
 ------------------------------------------------------------
 
-SELECT string_to_array(:'old_emails', ',') AS old_email_array
+SELECT ARRAY(
+  SELECT lower(trim(email_text))
+  FROM unnest(string_to_array(:'old_emails', ',')) AS email_text
+) AS normalized_old_email_array
 \gset
-\echo 'Old emails converted to an array: ':old_email_array
+
+SELECT lower(trim(:'new_email')) AS normalized_new_email
+\gset
 
 SELECT array_length(string_to_array(:'old_emails', ','), 1) AS old_email_input_count
 \gset
 
 SELECT COUNT(*) AS old_user_match_count
 FROM users
-WHERE email = ANY (string_to_array(:'old_emails', ','))
+WHERE lower(email) = ANY (:'normalized_old_email_array')
 \gset
 
 SELECT
   (array_length(string_to_array(:'old_emails', ','), 1)
    = COUNT(*)) AS email_match_ok
 FROM users
-WHERE email = ANY (string_to_array(:'old_emails', ','))
+WHERE lower(email) = ANY (:'normalized_old_email_array')
 \gset
 
 \if :email_match_ok
@@ -113,7 +118,12 @@ WHERE email = ANY (string_to_array(:'old_emails', ','))
 
 SELECT array_agg(id) AS old_user_ids
 FROM users
-WHERE email = ANY (:'old_email_array')
+WHERE lower(email) = ANY (:'normalized_old_email_array')
+\gset
+
+SELECT array_agg(email ORDER BY id) AS matched_old_emails
+FROM users
+WHERE lower(email) = ANY (:'normalized_old_email_array')
 \gset
 
 ------------------------------------------------------------
@@ -122,12 +132,12 @@ WHERE email = ANY (:'old_email_array')
 
 SELECT COUNT(*)=1 AS one_new_user_found
 FROM users
-WHERE email = :'new_email'
+WHERE lower(email) = :'normalized_new_email'
 \gset
 
 SELECT COUNT(*) AS new_user_count
 FROM users
-WHERE email = :'new_email'
+WHERE lower(email) = :'normalized_new_email'
 \gset
 
 \if :one_new_user_found
@@ -139,8 +149,17 @@ WHERE email = :'new_email'
 
 SELECT id AS new_user_id
 FROM users
-WHERE email = :'new_email'
+WHERE lower(email) = :'normalized_new_email'
 \gset
+
+SELECT email AS matched_new_email
+FROM users
+WHERE lower(email) = :'normalized_new_email'
+\gset
+
+\echo 'Matched old emails: ':matched_old_emails
+
+\echo 'Matched new email: ':matched_new_email
 
 \echo 'Found user IDs to merge: ':old_user_ids' -> ':new_user_id
 

@@ -1,0 +1,6 @@
+# Optional include prefixes (one per line). If this file has entries,
+# only URLs starting with one of these prefixes are processed.
+# Blank lines and lines starting with # are ignored.
+
+# Example:
+https://storage.googleapis.com/backblast-images/
