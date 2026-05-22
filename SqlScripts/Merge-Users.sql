@@ -26,6 +26,7 @@
 \set ON_ERROR_STOP on
 \set QUIET on
 \pset footer off
+\pset pager off
 
 ------------------------------------------------------------
 -- Check for required inputs
@@ -267,7 +268,44 @@ WHERE user_id = ANY (:'old_user_ids')
 ------------------------------------------------------------
 \echo
 \echo '==================================================='
-\echo 'Achievement remapping is not currently implemented. There is a unique key constraint on (user_id, achievement_id, award_year, award_period) that must be handled. And we''re not even using achievements yet...'
+\echo 'Updating achievement mappings to new user ID'
+
+\echo 'Old user(s) achievement mappings:'
+SELECT u.f3_name, a.name, axu.award_year, axu.award_period, axu.date_awarded
+FROM achievements_x_users axu
+LEFT JOIN users u ON axu.user_id = u.id
+LEFT JOIN achievements a ON axu.achievement_id = a.id
+WHERE axu.user_id = ANY (:'old_user_ids');
+
+\echo 'New user achievement mappings:'
+SELECT u.f3_name, a.name, axu.award_year, axu.award_period, axu.date_awarded
+FROM achievements_x_users axu
+LEFT JOIN users u ON axu.user_id = u.id
+LEFT JOIN achievements a ON axu.achievement_id = a.id
+WHERE axu.user_id = :'new_user_id';
+
+\echo 'Deleting achievements for old users that the new user already has'
+DELETE FROM achievements_x_users axu_old
+WHERE axu_old.user_id = ANY (:'old_user_ids')
+  AND EXISTS (
+      SELECT 1
+      FROM achievements_x_users axu_new
+      WHERE axu_new.user_id = :'new_user_id'
+        AND axu_new.achievement_id = axu_old.achievement_id
+        AND axu_new.award_year    = axu_old.award_year
+        AND axu_new.award_period  = axu_old.award_period
+  );
+
+\echo 'Updating remaining achievements'
+UPDATE achievements_x_users
+SET user_id = :'new_user_id'
+WHERE user_id = ANY (:'old_user_ids');
+
+SELECT COUNT(*) AS remaining_old_achievement_mappings
+FROM achievements_x_users
+WHERE user_id = ANY (:'old_user_ids')
+\gset
+\echo 'Remaining achievement mappings for old user IDs (should be 0): ':remaining_old_achievement_mappings
 
 ------------------------------------------------------------
 -- Update API Keys
@@ -387,7 +425,7 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
   \echo '  - Delete slack users listed above'
   \echo '  - Update roles listed above'
   \echo '  - Update positions listed above'
-  \echo '  - Update achievements listed above (NOT IMPLEMENTED)'
+  \echo '  - Update achievements listed above'
   \echo '  - Update API Keys listed above'
   \echo '  - Update expansions listed above (NOT IMPLEMENTED)'
   \echo '  - Update attendance records indicated above'
