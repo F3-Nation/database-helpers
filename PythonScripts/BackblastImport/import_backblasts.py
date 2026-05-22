@@ -532,8 +532,18 @@ def main():
             location_ids.add(location_id)
             event_dates.append(start_date)
         
-        oldest_date = min(event_dates) if event_dates else "N/A"
-        newest_date = max(event_dates) if event_dates else "N/A"
+        def parse_date(s):
+            for fmt in ('%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d'):
+                try:
+                    return datetime.strptime(s, fmt)
+                except ValueError:
+                    continue
+            return None
+
+        parsed_dates = [(parse_date(d), d) for d in event_dates]
+        valid_parsed = [(dt, s) for dt, s in parsed_dates if dt is not None]
+        oldest_date = min(valid_parsed, key=lambda x: x[0])[1] if valid_parsed else "N/A"
+        newest_date = max(valid_parsed, key=lambda x: x[0])[1] if valid_parsed else "N/A"
         unique_orgs = len(org_ids)
         unique_locations = len(location_ids)
         
