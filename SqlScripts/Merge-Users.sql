@@ -416,6 +416,58 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
 \echo 'Remaining attendance records for old user IDs (should be 0): ':remaining_old_attendance
 
 ------------------------------------------------------------
+-- Delete auth schema records for old users
+------------------------------------------------------------
+\echo
+\echo '==================================================='
+\echo 'Deleting auth schema records for old user IDs'
+
+\echo 'Old user(s) auth.oauth_authorization_codes:'
+SELECT u.f3_name, c.user_id, c.created_at
+FROM auth.oauth_authorization_codes c
+LEFT JOIN users u ON c.user_id = u.id
+WHERE c.user_id = ANY (:'old_user_ids'::int[]);
+
+DELETE FROM auth.oauth_authorization_codes
+WHERE user_id = ANY (:'old_user_ids'::int[]);
+
+SELECT COUNT(*) AS remaining_oauth_auth_codes
+FROM auth.oauth_authorization_codes
+WHERE user_id = ANY (:'old_user_ids'::int[])
+\gset
+\echo 'Remaining auth.oauth_authorization_codes for old user IDs (should be 0): ':remaining_oauth_auth_codes
+
+\echo 'Old user(s) auth.oauth_access_tokens:'
+SELECT u.f3_name, t.user_id, t.created_at
+FROM auth.oauth_access_tokens t
+LEFT JOIN users u ON t.user_id = u.id
+WHERE t.user_id = ANY (:'old_user_ids'::int[]);
+
+DELETE FROM auth.oauth_access_tokens
+WHERE user_id = ANY (:'old_user_ids'::int[]);
+
+SELECT COUNT(*) AS remaining_oauth_access_tokens
+FROM auth.oauth_access_tokens
+WHERE user_id = ANY (:'old_user_ids'::int[])
+\gset
+\echo 'Remaining auth.oauth_access_tokens for old user IDs (should be 0): ':remaining_oauth_access_tokens
+
+\echo 'Old user(s) auth.oauth_refresh_tokens:'
+SELECT u.f3_name, t.user_id, t.created_at
+FROM auth.oauth_refresh_tokens t
+LEFT JOIN users u ON t.user_id = u.id
+WHERE t.user_id = ANY (:'old_user_ids'::int[]);
+
+DELETE FROM auth.oauth_refresh_tokens
+WHERE user_id = ANY (:'old_user_ids'::int[]);
+
+SELECT COUNT(*) AS remaining_oauth_refresh_tokens
+FROM auth.oauth_refresh_tokens
+WHERE user_id = ANY (:'old_user_ids'::int[])
+\gset
+\echo 'Remaining auth.oauth_refresh_tokens for old user IDs (should be 0): ':remaining_oauth_refresh_tokens
+
+------------------------------------------------------------
 -- Explicit confirmation
 ------------------------------------------------------------
 \if :commit
@@ -429,6 +481,7 @@ WHERE user_id = ANY (:'old_user_ids'::int[])
   \echo '  - Update API Keys listed above'
   \echo '  - Update expansions listed above (NOT IMPLEMENTED)'
   \echo '  - Update attendance records indicated above'
+  \echo '  - Delete auth schema records (oauth_authorization_codes, oauth_access_tokens, oauth_refresh_tokens) listed above'
   \echo
   \echo 'Above changes will be commited, then old users will be deleted. User delete action is taken separately in case unhandled references remain.'
   \echo 'Press ENTER to COMMIT changes or Ctrl+C to ROLLBACK changes and exit'
