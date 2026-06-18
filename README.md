@@ -58,7 +58,7 @@ Move-Item cloud-sql-proxy.exe "$env:USERPROFILE\bin\cloud-sql-proxy.exe"
 [Environment]::SetEnvironmentVariable("Path", "$env:USERPROFILE\bin;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
 ```
 
-> **WSL + Windows note:** If you use psql in WSL _and_ DBeaver on Windows, install the proxy in **both** environments. WSL and Windows have separate network stacks, so each needs its own proxy running on its own `localhost`. The Linux install instructions above work inside WSL. Run `gcloud auth application-default login` separately in each environment as well.
+> **WSL + Windows note:** If you use psql in WSL _and_ DBeaver on Windows, install the proxy in **both** environments. WSL and Windows have separate network stacks, so each needs its own proxy running on its own `localhost`. The Linux install instructions above work inside WSL. Run `gcloud auth application-default login` separately in each environment as well. **IMPORT**: The ports you configure for Windows have to be different than those in WSL. Otherwise they will conflict with each other.
 
 See the [official downloads page](https://cloud.google.com/sql/docs/postgres/sql-proxy#install) for other platforms or the latest version.
 
@@ -81,23 +81,25 @@ You want the proxy running automatically so you don't have to start it manually 
 **Linux / WSL (systemd):**
 
 ```bash
-mkdir -p ~/.config/systemd/user
-nano ~/.config/systemd/user/cloud-sql-proxy.service
+sudo nano /etc/systemd/system/cloud-sql-proxy.service
 ```
 
 Paste (replacing the connection names):
 ```ini
 [Unit]
 Description=Cloud SQL Auth Proxy
+After=network.target
 
 [Service]
+User=<user name>
 ExecStart=/usr/local/bin/cloud-sql-proxy \
-  "PROJECT:REGION:PROD_INSTANCE?port=5433" \
-  "PROJECT:REGION:STAGING_INSTANCE?port=5434"
+  --address 127.0.0.1 \
+  'f3data:us-central1:f3data?port=5437' \
+  'f3data:us-central1:f3data-nonprod?port=5438'
 Restart=on-failure
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 ```
 
 Save and exit nano (`Ctrl+O`, Enter, `Ctrl+X`), then enable and start it:
