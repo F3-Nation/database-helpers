@@ -69,12 +69,21 @@ This output file can be used as reference or input for subsequent processes (lik
 
 ## Error Handling
 
-The script will stop and report errors if:
+The script validates input before importing and will stop with an error if any check fails:
 
-- Required columns are missing or empty
-- `home_region_id` values don't exist in the database
+- CSV file does not exist
+- CSV file is empty
+- A required column value is missing or empty on any row (`f3_name`, `email`, `home_region_id`)
+- Any `home_region_id` value is not a valid integer
+- Any `home_region_id` does not exist in `orgs` with `org_type='region'`
 - Database connection fails
-- Other database errors occur
+
+During import, it will also stop if:
+
+- A row has an invalid `home_region_id` format at upsert time
+- Any database error occurs while inserting/updating users
+
+If a database error occurs after processing starts, the transaction is rolled back so partial imports are not committed.
 
 Review the error messages and update your CSV accordingly.
 
