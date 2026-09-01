@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCP IAM Access Dashboard</title>
+    
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+            color: #202124;
+        }
+        h1 { color: #1a73e8; margin-bottom: 5px; }
+        .subtitle { color: #5f6368; margin-bottom: 20px; }
+        .container {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            border-bottom: 2px solid #dadce0;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: #5f6368;
+            border-bottom: 3px solid transparent;
+        }
+        .tab-btn.active {
+            color: #1a73e8;
+            border-bottom-color: #1a73e8;
+        }
+
+        /* Views management */
+        .view-content { display: none; }
+        .view-content.active { display: block; }
+
+        /* DataTables Custom Text Wrapping Fixes */
+        table.dataTable tbody td {
+            vertical-align: top;
+            font-size: 13px;
+            white-space: normal !important; /* Forces text wrapping */
+            word-break: break-word !important;
+        }
+        
+        /* Badges & Text Wrapping Containers */
+        .badge-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            max-width: 500px; /* Constrains column width to force wrapping */
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 7px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            word-break: break-all;
+            line-height: 1.3;
+        }
+        .badge-role { background-color: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; }
+        .badge-resource { background-color: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
+        .badge-user { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+        .badge-count { background-color: #f1f3f4; color: #3c4043; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>GCP IAM Access Inspector</h1>
+        <p class="subtitle">Loaded from local <code>gcp_user_access_summary.csv</code></p>
+
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('userView')">View by User</button>
+            <button class="tab-btn" onclick="switchTab('resourceView')">View by Resource</button>
+            <button class="tab-btn" onclick="switchTab('roleView')">View by Role</button>
+        </div>
+
+        <div id="userView" class="view-content active">
+            <table id="tableUser" class="display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 25%">User / Account Email</th>
+                        <th style="width: 10%">Roles</th>
+                        <th style="width: 10%">Resources</th>
+                        <th style="width: 25%">Roles Assigned</th>
+                        <th style="width: 30%">Resources Accessible</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="resourceView" class="view-content">
+            <table id="tableResource" class="display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 35%">Resource</th>
+                        <th style="width: 10%">Users</th>
+                        <th style="width: 10%">Roles</th>
+                        <th style="width: 25%">Users with Access</th>
+                        <th style="width: 20%">Roles Granted</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="roleView" class="view-content">
+            <table id="tableRole" class="display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 30%">Role</th>
+                        <th style="width: 10%">Users</th>
+                        <th style="width: 10%">Resources</th>
+                        <th style="width: 25%">Assigned Users</th>
+                        <th style="width: 25%">Affected Resources</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <script>
+        let rawData = [];
+
+        $(document).ready(function() {
+            Papa.parse("gcp_user_access_summary.csv", {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    rawData = results.data;
+                    renderUserTable(rawData);
+                    renderResourceTable(rawData);
+                    renderRoleTable(rawData);
+                }
+            });
+        });
+
+        function switchTab(viewId) {
+            $('.tab-btn').removeClass('active');
+            $('.view-content').removeClass('active');
+            
+            $(`button[onclick="switchTab('${viewId}')"]`).addClass('active');
+            $(`#${viewId}`).addClass('active');
+            
+            // Recalculate DataTables headers on tab switch
+            $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+        }
+
+        // Helper function to turn strings into wrapped badges
+        function makeBadges(dataStr, badgeClass) {
+            if (!dataStr) return '';
+            const items = dataStr.split(';');
+            return `<div class="badge-list">${items.map(i => `<span class="badge ${badgeClass}">${i.trim()}</span>`).join('')}</div>`;
+        }
+
+        // 1. Render User Table
+        function renderUserTable(data) {
+            $('#tableUser').DataTable({
+                data: data,
+                columns: [
+                    { data: 'User_Email' },
+                    { data: 'Total_Roles', render: d => `<span class="badge badge-count">${d}</span>` },
+                    { data: 'Total_Resources', render: d => `<span class="badge badge-count">${d}</span>` },
+                    { data: 'Roles_Assigned', render: d => makeBadges(d, 'badge-role') },
+                    { data: 'Resources_Accessible', render: d => makeBadges(d, 'badge-resource') }
+                ],
+                pageLength: 25,
+                order: [[1, 'desc']],
+                autoWidth: false
+            });
+        }
+
+        // 2. Aggregate & Render Resource Table
+        function renderResourceTable(data) {
+            let resourceMap = {};
+
+            data.forEach(row => {
+                const user = row.User_Email;
+                const roles = row.Roles_Assigned ? row.Roles_Assigned.split(';') : [];
+                const resources = row.Resources_Accessible ? row.Resources_Accessible.split(';') : [];
+
+                resources.forEach(res => {
+                    res = res.trim();
+                    if (!res) return;
+                    if (!resourceMap[res]) {
+                        resourceMap[res] = { users: new Set(), roles: new Set() };
+                    }
+                    resourceMap[res].users.add(user);
+                    roles.forEach(r => resourceMap[res].roles.add(r.trim()));
+                });
+            });
+
+            const tableData = Object.keys(resourceMap).map(res => ({
+                resource: res,
+                userCount: resourceMap[res].users.size,
+                roleCount: resourceMap[res].roles.size,
+                users: Array.from(resourceMap[res].users).join(';'),
+                roles: Array.from(resourceMap[res].roles).join(';')
+            }));
+
+            $('#tableResource').DataTable({
+                data: tableData,
+                columns: [
+                    { data: 'resource' },
+                    { data: 'userCount', render: d => `<span class="badge badge-count">${d}</span>` },
+                    { data: 'roleCount', render: d => `<span class="badge badge-count">${d}</span>` },
+                    { data: 'users', render: d => makeBadges(d, 'badge-user') },
+                    { data: 'roles', render: d => makeBadges(d, 'badge-role') }
+                ],
+                pageLength: 25,
+                order: [[1, 'desc']],
+                autoWidth: false
+            });
+        }
+
+        // 3. Aggregate & Render Role Table
+        function renderRoleTable(data) {
+            let roleMap = {};
+
+            data.forEach(row => {
+                const user = row.User_Email;
+                const roles = row.Roles_Assigned ? row.Roles_Assigned.split(';') : [];
+                const resources = row.Resources_Accessible ? row.Resources_Accessible.split(';') : [];
+
+                roles.forEach(role => {
+                    role = role.trim();
+                    if (!role) return;
+                    if (!roleMap[role]) {
+                        roleMap[role] = { users: new Set(), resources: new Set() };
+                    }
+                    roleMap[role].users.add(user);
+                    resources.forEach(res => roleMap[role].resources.add(res.trim()));
+                });
+            });
+
+            const tableData = Object.keys(roleMap).map(role => ({
+                role: role,
+                userCount: roleMap[role].users.size,
+                resourceCount: roleMap[role].resources.size,
+                users: Array.from(roleMap[role].users).join(';'),
+                resources: Array.from(roleMap[role].resources).join(';')
+            }));
+
+            $('#tableRole').DataTable({
+                data: tableData,
+                columns: [
+                    { data: 'role' },
+                    { data: 'userCount', render: d => `<span class="badge badge-count">${d}</span>` },
+                    { data: 'resourceCount', render: d => `<span class="badge badge-count">${d}</span>` },
+                    { data: 'users', render: d => makeBadges(d, 'badge-user') },
+                    { data: 'resources', render: d => makeBadges(d, 'badge-resource') }
+                ],
+                pageLength: 25,
+                order: [[1, 'desc']],
+                autoWidth: false
+            });
+        }
+    </script>
+</body>
+</html>

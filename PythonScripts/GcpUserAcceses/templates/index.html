@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GCP IAM Access Manager</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>GCP IAM Access Manager</h1>
+      <p class="subtitle">Scope: <code id="scopeLabel">…</code> · Cache updated:
+        <span id="updatedLabel">never</span></p>
+    </div>
+    <div class="header-actions">
+      <button id="addBtn" class="btn btn-primary">+ Add access</button>
+      <button id="refreshBtn" class="btn">↻ Refresh all</button>
+    </div>
+  </header>
+
+  <section class="controls">
+    <div class="control-block">
+      <label>Group by (drag to reorder)</label>
+      <ul id="groupOrder" class="chips"></ul>
+    </div>
+    <div class="control-block">
+      <label>Member type</label>
+      <div id="memberTypeFilter" class="checkbox-row"></div>
+    </div>
+    <div class="control-block grow">
+      <label>Search</label>
+      <input id="searchBox" type="search" placeholder="filter by email, resource, or role…">
+    </div>
+  </section>
+
+  <p id="summaryLine" class="summary"></p>
+  <div id="tree" class="tree"></div>
+
+  <!-- Add access modal -->
+  <div id="addModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Add access</h2>
+        <button id="addClose" class="icon-btn">✕</button>
+      </div>
+
+      <div class="form-row">
+        <label>Member</label>
+        <div class="inline">
+          <select id="memberType">
+            <option value="user">user</option>
+            <option value="serviceAccount">serviceAccount</option>
+            <option value="group">group</option>
+          </select>
+          <div class="combo grow">
+            <input id="memberEmail" placeholder="email address" autocomplete="off">
+            <div id="memberEmailList" class="combo-list hidden"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Resource</label>
+        <div class="resource-picker">
+          <div class="inline">
+            <select id="projectSelect"><option value="">Select project…</option></select>
+            <button id="projectSelfBtn" class="btn small" title="Bind at the project level">Use project</button>
+          </div>
+          <div class="inline">
+            <select id="typeSelect" disabled><option value="">Resource type…</option></select>
+            <select id="resourceSelect" disabled><option value="">Resource…</option></select>
+          </div>
+          <input id="resourceName" placeholder="full resource name (//service…/…)" class="grow">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Role</label>
+        <div class="combo grow">
+          <input id="roleInput" placeholder="roles/…" autocomplete="off">
+          <div id="roleList" class="combo-list hidden"></div>
+        </div>
+      </div>
+
+      <div id="addStatus" class="status"></div>
+      <div class="modal-foot">
+        <button id="grantBtn" class="btn btn-primary">Grant access</button>
+        <button id="addCancel" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- gcloud auth-needed popup -->
+  <div id="authModal" class="modal hidden">
+    <div class="modal-card" style="width:520px">
+      <div class="modal-head">
+        <h2>gcloud sign-in needed</h2>
+        <button id="authClose" class="icon-btn">✕</button>
+      </div>
+      <div class="form-row" style="padding-bottom:0">
+        <p>Your gcloud credentials are missing or expired, so GCP rejected the
+          request. Run both of these in a terminal:</p>
+        <pre class="code-block">gcloud auth login
+gcloud auth application-default login</pre>
+        <p>Then come back here and click <b>Retry</b>. If you were mid-action
+          (grant/revoke), just repeat it after retrying.</p>
+        <details><summary>Error details</summary>
+          <pre id="authDetail" class="code-block"></pre></details>
+      </div>
+      <div class="modal-foot">
+        <button id="authRetry" class="btn btn-primary">Retry</button>
+        <button id="authDismiss" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

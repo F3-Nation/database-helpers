@@ -6,5 +6,6 @@ env/
 __pycache__/
 .env*
 !.env.example
+!.env.sample
 SecurityKeys/
 PythonScripts/AvatarUrlMigrator/output/

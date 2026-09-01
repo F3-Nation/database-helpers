@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCP IAM Access Drill-Down Dashboard</title>
+    
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+            color: #202124;
+        }
+        h1 { color: #1a73e8; margin-bottom: 5px; }
+        .subtitle { color: #5f6368; margin-bottom: 20px; }
+        .container {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            border-bottom: 2px solid #dadce0;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: #5f6368;
+            border-bottom: 3px solid transparent;
+        }
+        .tab-btn.active {
+            color: #1a73e8;
+            border-bottom-color: #1a73e8;
+        }
+
+        .view-content { display: none; }
+        .view-content.active { display: block; }
+
+        /* Expand / Collapse Control Button */
+        td.dt-control {
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            color: #1a73e8;
+            user-select: none;
+        }
+
+        /* Sub-table styling */
+        .sub-table-container {
+            padding: 10px 20px;
+            background-color: #f1f3f4;
+            border-radius: 6px;
+            margin: 5px 0;
+        }
+        table.sub-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #ffffff;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        table.sub-table th {
+            background-color: #e8f0fe;
+            color: #1a73e8;
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 12px;
+            border-bottom: 1px solid #dadce0;
+        }
+        table.sub-table td {
+            padding: 8px 12px;
+            font-size: 12px;
+            border-bottom: 1px solid #f1f3f4;
+            word-break: break-all;
+            vertical-align: middle;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-count { background-color: #e8f0fe; color: #1a73e8; }
+        .badge-role { background-color: #fef7e0; color: #b06000; border: 1px solid #feefc3; }
+        .badge-user { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+
+        /* Copy Button Styles */
+        .btn-copy {
+            background-color: #ffffff;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            color: #3c4043;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 3px 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s ease;
+        }
+        .btn-copy:hover {
+            background-color: #e8f0fe;
+            color: #1a73e8;
+            border-color: #d2e3fc;
+        }
+        .btn-copy:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>GCP IAM Access Inspector</h1>
+        <p class="subtitle">Click <code>+</code> next to any row to expand mappings. Use the 📋 Copy button on individual lines to copy format for <code>revoke_list.csv</code>.</p>
+
+        <!-- Navigation Tabs -->
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('userView')">By User</button>
+            <button class="tab-btn" onclick="switchTab('resourceView')">By Resource</button>
+            <button class="tab-btn" onclick="switchTab('roleView')">By Role</button>
+        </div>
+
+        <!-- 1. USER VIEW -->
+        <div id="userView" class="view-content active">
+            <table id="tableUser" class="display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 5%"></th>
+                        <th style="width: 45%">User / Account Email</th>
+                        <th style="width: 25%">Total Resources Accessible</th>
+                        <th style="width: 25%">Total Unique Roles</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- 2. RESOURCE VIEW -->
+        <div id="resourceView" class="view-content">
+            <table id="tableResource" class="display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 5%"></th>
+                        <th style="width: 50%">Resource</th>
+                        <th style="width: 22%">Unique Users</th>
+                        <th style="width: 23%">Unique Roles Granted</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- 3. ROLE VIEW -->
+        <div id="roleView" class="view-content">
+            <table id="tableRole" class="display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 5%"></th>
+                        <th style="width: 45%">Role Name</th>
+                        <th style="width: 25%">Assigned Users</th>
+                        <th style="width: 25%">Target Resources</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Required Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <script>
+        let rawBindings = [];
+
+        $(document).ready(function() {
+            Papa.parse("gcp_user_access_summary.csv", {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    rawBindings = results.data;
+                    initUserTable();
+                    initResourceTable();
+                    initRoleTable();
+                }
+            });
+        });
+
+        function switchTab(viewId) {
+            $('.tab-btn').removeClass('active');
+            $('.view-content').removeClass('active');
+            
+            $(`button[onclick="switchTab('${viewId}')"]`).addClass('active');
+            $(`#${viewId}`).addClass('active');
+            
+            $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+        }
+
+        // Global Copy Helper: Copies format User_Email,Resource,Role
+        function copyRevokeLine(button, user, resource, role) {
+            const csvLine = `${user},${resource},${role}`;
+            navigator.clipboard.writeText(csvLine).then(() => {
+                const originalText = button.innerHTML;
+                button.innerHTML = '✓ Copied!';
+                button.style.backgroundColor = '#e6f4ea';
+                button.style.color = '#137333';
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.style.backgroundColor = '';
+                    button.style.color = '';
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+
+        function attachExpandHandler(tableId, formatterFunc) {
+            $(`#${tableId} tbody`).on('click', 'td.dt-control', function () {
+                const dt = $(`#${tableId}`).DataTable();
+                const tr = $(this).closest('tr');
+                const row = dt.row(tr);
+
+                if (row.child.isShown()) {
+                    row.child.hide();
+                    tr.removeClass('shown');
+                    $(this).html('+');
+                } else {
+                    row.child(formatterFunc(row.data())).show();
+                    tr.addClass('shown');
+                    $(this).html('−');
+                }
+            });
+        }
+
+        // --- 1. BY USER TABLE ---
+        function initUserTable() {
+            let userMap = {};
+            rawBindings.forEach(row => {
+                const { User_Email: user, Resource: res, Role: role } = row;
+                if (!user || !res || !role) return;
+
+                if (!userMap[user]) {
+                    userMap[user] = { resources: {}, allRoles: new Set() };
+                }
+                if (!userMap[user].resources[res]) {
+                    userMap[user].resources[res] = new Set();
+                }
+
+                userMap[user].resources[res].add(role);
+                userMap[user].allRoles.add(role);
+            });
+
+            const data = Object.keys(userMap).sort().map(user => ({
+                user,
+                resCount: Object.keys(userMap[user].resources).length,
+                roleCount: userMap[user].allRoles.size,
+                resources: userMap[user].resources
+            }));
+
+            $('#tableUser').DataTable({
+                data: data,
+                columns: [
+                    { className: 'dt-control', orderable: false, data: null, defaultContent: '+' },
+                    { data: 'user' },
+                    { data: 'resCount', render: d => `<span class="badge badge-count">${d} Resources</span>` },
+                    { data: 'roleCount', render: d => `<span class="badge badge-count">${d} Roles</span>` }
+                ],
+                order: [[1, 'asc']],
+                pageLength: 25
+            });
+
+            attachExpandHandler('tableUser', d => {
+                const sortedResources = Object.keys(d.resources).sort();
+                let rowsHtml = '';
+
+                sortedResources.forEach(res => {
+                    const sortedRoles = Array.from(d.resources[res]).sort();
+                    sortedRoles.forEach(role => {
+                        rowsHtml += `
+                            <tr>
+                                <td style="width: 45%"><strong>${res}</strong></td>
+                                <td style="width: 45%"><span class="badge badge-role">${role}</span></td>
+                                <td style="width: 10%; text-align: right;">
+                                    <button class="btn-copy" onclick="copyRevokeLine(this, '${d.user}', '${res}', '${role}')">📋 Copy</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                });
+
+                return `<div class="sub-table-container">
+                    <table class="sub-table">
+                        <thead><tr><th>Resource</th><th>Granted Role</th><th>Action</th></tr></thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>`;
+            });
+        }
+
+        // --- 2. BY RESOURCE TABLE ---
+        function initResourceTable() {
+            let resMap = {};
+            rawBindings.forEach(row => {
+                const { User_Email: user, Resource: res, Role: role } = row;
+                if (!user || !res || !role) return;
+
+                if (!resMap[res]) {
+                    resMap[res] = { users: {}, allRoles: new Set() };
+                }
+                if (!resMap[res].users[user]) {
+                    resMap[res].users[user] = new Set();
+                }
+
+                resMap[res].users[user].add(role);
+                resMap[res].allRoles.add(role);
+            });
+
+            const data = Object.keys(resMap).sort().map(res => ({
+                res,
+                userCount: Object.keys(resMap[res].users).length,
+                roleCount: resMap[res].allRoles.size,
+                users: resMap[res].users
+            }));
+
+            $('#tableResource').DataTable({
+                data: data,
+                columns: [
+                    { className: 'dt-control', orderable: false, data: null, defaultContent: '+' },
+                    { data: 'res' },
+                    { data: 'userCount', render: d => `<span class="badge badge-count">${d} Users</span>` },
+                    { data: 'roleCount', render: d => `<span class="badge badge-count">${d} Roles</span>` }
+                ],
+                order: [[1, 'asc']],
+                pageLength: 25
+            });
+
+            attachExpandHandler('tableResource', d => {
+                const sortedUsers = Object.keys(d.users).sort();
+                let rowsHtml = '';
+
+                sortedUsers.forEach(u => {
+                    const sortedRoles = Array.from(d.users[u]).sort();
+                    sortedRoles.forEach(role => {
+                        rowsHtml += `
+                            <tr>
+                                <td style="width: 45%"><span class="badge badge-user">${u}</span></td>
+                                <td style="width: 45%"><span class="badge badge-role">${role}</span></td>
+                                <td style="width: 10%; text-align: right;">
+                                    <button class="btn-copy" onclick="copyRevokeLine(this, '${u}', '${d.res}', '${role}')">📋 Copy</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                });
+
+                return `<div class="sub-table-container">
+                    <table class="sub-table">
+                        <thead><tr><th>User / Account Email</th><th>Granted Role</th><th>Action</th></tr></thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>`;
+            });
+        }
+
+        // --- 3. BY ROLE TABLE ---
+        function initRoleTable() {
+            let roleMap = {};
+            rawBindings.forEach(row => {
+                const { User_Email: user, Resource: res, Role: role } = row;
+                if (!user || !res || !role) return;
+
+                if (!roleMap[role]) {
+                    roleMap[role] = { users: {}, allResources: new Set() };
+                }
+                if (!roleMap[role].users[user]) {
+                    roleMap[role].users[user] = new Set();
+                }
+
+                roleMap[role].users[user].add(res);
+                roleMap[role].allResources.add(res);
+            });
+
+            const data = Object.keys(roleMap).sort().map(role => ({
+                role,
+                userCount: Object.keys(roleMap[role].users).length,
+                resCount: roleMap[role].allResources.size,
+                users: roleMap[role].users
+            }));
+
+            $('#tableRole').DataTable({
+                data: data,
+                columns: [
+                    { className: 'dt-control', orderable: false, data: null, defaultContent: '+' },
+                    { data: 'role' },
+                    { data: 'userCount', render: d => `<span class="badge badge-count">${d} Users</span>` },
+                    { data: 'resCount', render: d => `<span class="badge badge-count">${d} Resources</span>` }
+                ],
+                order: [[1, 'asc']],
+                pageLength: 25
+            });
+
+            attachExpandHandler('tableRole', d => {
+                const sortedUsers = Object.keys(d.users).sort();
+                let rowsHtml = '';
+
+                sortedUsers.forEach(u => {
+                    const sortedRes = Array.from(d.users[u]).sort();
+                    sortedRes.forEach(res => {
+                        rowsHtml += `
+                            <tr>
+                                <td style="width: 45%"><span class="badge badge-user">${u}</span></td>
+                                <td style="width: 45%"><strong>${res}</strong></td>
+                                <td style="width: 10%; text-align: right;">
+                                    <button class="btn-copy" onclick="copyRevokeLine(this, '${u}', '${res}', '${d.role}')">📋 Copy</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                });
+
+                return `<div class="sub-table-container">
+                    <table class="sub-table">
+                        <thead><tr><th>User / Account Email</th><th>Target Resource</th><th>Action</th></tr></thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>`;
+            });
+        }
+    </script>
+</body>
+</html>
