@@ -93,6 +93,24 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <!-- Action-failed popup (explains why a grant/revoke failed) -->
+  <div id="failModal" class="modal hidden">
+    <div class="modal-card" style="width:540px">
+      <div class="modal-head">
+        <h2 id="failTitle">Action failed</h2>
+        <button id="failClose" class="icon-btn">✕</button>
+      </div>
+      <div class="form-row" style="padding-bottom:0">
+        <p id="failMsg"></p>
+        <details><summary>Error details</summary>
+          <pre id="failDetail" class="code-block"></pre></details>
+      </div>
+      <div class="modal-foot">
+        <button id="failDismiss" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- gcloud auth-needed popup -->
   <div id="authModal" class="modal hidden">
     <div class="modal-card" style="width:520px">

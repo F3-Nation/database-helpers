@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Postgres Security Manager</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Postgres Security Manager</h1>
+      <p class="subtitle">Snapshot: <span id="updatedLabel">not loaded</span></p>
+    </div>
+    <div class="header-actions">
+      <button id="addBtn" class="btn btn-primary">+ Add access</button>
+    </div>
+  </header>
+
+  <section class="connbar">
+    <div class="field">
+      <label>Service</label>
+      <select id="serviceSelect"></select>
+    </div>
+    <div class="field">
+      <label>Database</label>
+      <select id="dbSelect"></select>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="refreshBtn" class="btn">↻ Refresh snapshot</button>
+    </div>
+    <div class="field grow">
+      <label>&nbsp;</label>
+      <span id="connStatus" class="subtitle"></span>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab active" data-view="rolesView">Roles &amp; groups</button>
+    <button class="tab" data-view="privView">Privileges</button>
+    <button class="tab" data-view="defaultView">Default privileges</button>
+    <button class="tab" data-view="rlsView">Row-level security</button>
+  </nav>
+
+  <!-- Roles view -->
+  <section id="rolesView" class="view active">
+    <div class="controls" style="padding-left:0;padding-right:0;border:none">
+      <div class="field">
+        <label>Show</label>
+        <div id="roleTypeFilter" class="checkbox-row"></div>
+      </div>
+      <div class="field grow">
+        <label>Search</label>
+        <input id="roleSearch" type="search" placeholder="filter roles…">
+      </div>
+    </div>
+    <div id="rolesList"></div>
+  </section>
+
+  <!-- Privileges view -->
+  <section id="privView" class="view">
+    <div class="controls" style="padding-left:0;padding-right:0;border:none">
+      <div class="field">
+        <label>Group by (drag to reorder)</label>
+        <ul id="privOrder" class="chips"></ul>
+      </div>
+      <div class="field">
+        <label>Grantee type</label>
+        <div id="granteeTypeFilter" class="checkbox-row"></div>
+      </div>
+      <div class="field">
+        <label>Schema</label>
+        <select id="schemaFilter"><option value="">all schemas</option></select>
+      </div>
+      <div class="field grow">
+        <label>Search</label>
+        <input id="privSearch" type="search" placeholder="filter by grantee, object, or privilege…">
+      </div>
+    </div>
+    <p id="privSummary" class="summary"></p>
+    <div id="privTree"></div>
+  </section>
+
+  <!-- Default privileges view -->
+  <section id="defaultView" class="view">
+    <div id="defaultTable"></div>
+  </section>
+
+  <!-- RLS view -->
+  <section id="rlsView" class="view">
+    <div id="rlsTable"></div>
+  </section>
+
+  <!-- Add access modal -->
+  <div id="addModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Add access</h2>
+        <button id="addClose" class="icon-btn">✕</button>
+      </div>
+      <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="membership">Role membership</button>
+        <button class="mode-tab" data-mode="privilege">Object privilege</button>
+      </div>
+
+      <!-- Membership mode -->
+      <div id="modeMembership">
+        <div class="form-row">
+          <label>Group / role to grant</label>
+          <div class="combo grow">
+            <input id="memGroup" placeholder="role name…" autocomplete="off">
+            <div id="memGroupList" class="combo-list hidden"></div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Member (role that receives it)</label>
+          <div class="combo grow">
+            <input id="memMember" placeholder="role name…" autocomplete="off">
+            <div id="memMemberList" class="combo-list hidden"></div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="inline"><input type="checkbox" id="memAdmin"> WITH ADMIN OPTION</label>
+        </div>
+      </div>
+
+      <!-- Privilege mode -->
+      <div id="modePrivilege" class="hidden">
+        <div class="form-row">
+          <label>Grantee</label>
+          <div class="combo grow">
+            <input id="prvGrantee" placeholder="role name or PUBLIC…" autocomplete="off">
+            <div id="prvGranteeList" class="combo-list hidden"></div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Object type</label>
+          <select id="prvType">
+            <option value="table">table</option>
+            <option value="view">view</option>
+            <option value="matview">materialized view</option>
+            <option value="sequence">sequence</option>
+            <option value="function">function</option>
+            <option value="schema">schema</option>
+            <option value="database">database</option>
+          </select>
+        </div>
+        <div class="form-row" id="prvSchemaRow">
+          <label>Schema</label>
+          <select id="prvSchema"><option value="">Select schema…</option></select>
+        </div>
+        <div class="form-row" id="prvObjectRow">
+          <label>Object</label>
+          <select id="prvObject" disabled><option value="">Object…</option></select>
+        </div>
+        <div class="form-row">
+          <label>Privilege</label>
+          <select id="prvPrivilege"></select>
+        </div>
+        <div class="form-row">
+          <label class="inline"><input type="checkbox" id="prvGrantOption"> WITH GRANT OPTION</label>
+        </div>
+      </div>
+
+      <div id="addStatus" class="status"></div>
+      <div class="modal-foot">
+        <button id="applyBtn" class="btn btn-primary">Grant</button>
+        <button id="addCancel" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection-error popup -->
+  <div id="connModal" class="modal hidden">
+    <div class="modal-card" style="width:560px">
+      <div class="modal-head">
+        <h2>Can't reach Postgres</h2>
+        <button id="connClose" class="icon-btn">✕</button>
+      </div>
+      <div class="form-row" style="padding-bottom:0">
+        <p>The database connection failed. Common causes and fixes:</p>
+        <ul style="font-size:13px;line-height:1.6">
+          <li>The <b>Cloud SQL Auth Proxy</b> isn't running — start it, then Retry.</li>
+          <li>The service isn't in <code>~/.pg_service.conf</code>, or the name is wrong.</li>
+          <li>Your login/credentials expired.</li>
+        </ul>
+        <details><summary>Error details</summary><pre id="connDetail" class="code-block"></pre></details>
+      </div>
+      <div class="modal-foot">
+        <button id="connRetry" class="btn btn-primary">Retry</button>
+        <button id="connDismiss" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action-failed popup (explains why a grant/revoke failed) -->
+  <div id="failModal" class="modal hidden">
+    <div class="modal-card" style="width:540px">
+      <div class="modal-head">
+        <h2 id="failTitle">Action failed</h2>
+        <button id="failClose" class="icon-btn">✕</button>
+      </div>
+      <div class="form-row" style="padding-bottom:0">
+        <p id="failMsg"></p>
+        <details><summary>Error details</summary>
+          <pre id="failDetail" class="code-block"></pre></details>
+      </div>
+      <div class="modal-foot">
+        <button id="failDismiss" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

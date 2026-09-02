@@ -75,6 +75,28 @@ document.getElementById("authRetry").addEventListener("click", async () => {
   }
 });
 
+// Explains WHY a grant/revoke failed (permission, not found, etc.).
+const failModal = document.getElementById("failModal");
+function showFailModal(out) {
+  const reason = (out && out.reason) || "error";
+  document.getElementById("failTitle").textContent =
+    reason === "permission_denied"
+      ? "You don't have permission"
+      : reason === "not_found"
+      ? "Not found"
+      : "Action failed";
+  document.getElementById("failMsg").textContent =
+    (out && out.reason_message) || "The command failed.";
+  document.getElementById("failDetail").textContent =
+    (out && out.stderr) || "(no details)";
+  failModal.classList.remove("hidden");
+}
+function hideFailModal() {
+  failModal.classList.add("hidden");
+}
+document.getElementById("failClose").addEventListener("click", hideFailModal);
+document.getElementById("failDismiss").addEventListener("click", hideFailModal);
+
 // ---- Load ------------------------------------------------------------------
 async function loadData() {
   const res = await fetch("/api/data");
@@ -250,7 +272,7 @@ async function revokeRecord(r) {
       render();
       toast("Revoked and verified.");
     } else {
-      toast(out.stderr || "Revoke failed — check terminal.", true);
+      showFailModal(out);
     }
   } catch (e) {
     if (!e.authHandled) toast(String(e), true);
@@ -480,7 +502,8 @@ document.getElementById("grantBtn").addEventListener("click", async () => {
       setStatus("Granted and verified.", "ok");
       toast("Access granted.");
     } else {
-      setStatus(out.stderr || "Grant failed — check terminal.", "err");
+      setStatus("");
+      showFailModal(out);
     }
   } catch (e) {
     if (!e.authHandled) setStatus(String(e), "err");

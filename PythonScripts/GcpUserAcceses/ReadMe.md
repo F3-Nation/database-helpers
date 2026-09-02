@@ -75,3 +75,6 @@ whenever you want fresh data.
   usually inherited and best changed at a parent resource. Add more mappings in
   `build_iam_command()` in `gcp_iam.py`.
 - Actions apply immediately (with a confirm dialog); there is no dry-run toggle.
+- **Read-only accounts are welcome.** You can browse and slice all IAM without
+  any write permission. If a grant/revoke fails, a popup explains why (most often
+  a missing IAM-admin role) with the raw error underneath.

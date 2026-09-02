@@ -226,6 +226,27 @@ def _policy_has_binding(policy, role, member):
     return False
 
 
+def _classify_write_error(text):
+    """Turn a gcloud failure into (reason, human message) for the UI popup."""
+    t = (text or "").lower()
+    if any(h in t for h in (
+        "permission_denied", "permission denied", "does not have permission",
+        "not have permission", "forbidden", "403", "iam.serviceaccounts",
+        "setiampolicy", "caller does not have",
+    )):
+        return ("permission_denied",
+                "Your account doesn't have permission to change IAM on this "
+                "resource. Read-only users can browse everything here but can't "
+                "grant or revoke. To make changes you need an IAM-admin role on "
+                "this resource (for a project, e.g. Owner or "
+                "roles/resourcemanager.projectIamAdmin).")
+    if any(h in t for h in ("not found", "notfound", "404", "does not exist")):
+        return ("not_found",
+                "The target resource, member, or role wasn't found. Double-check "
+                "the values and that the resource still exists.")
+    return ("error", "The command failed. See the details below.")
+
+
 def apply_binding(action, member, resource, asset_type, role):
     """Run the gcloud command, verify from the returned policy, return a dict."""
     cmd = build_iam_command(action, resource, asset_type, member, role)
@@ -241,14 +262,21 @@ def apply_binding(action, member, resource, asset_type, role):
             verified = has if action == "add" else (not has)
         except json.JSONDecodeError:
             verified = None
+    auth_required = (not ok) and _looks_like_auth_error(err)
+    reason, reason_message = (None, None)
+    if not ok and not auth_required:
+        reason, reason_message = _classify_write_error(err)
     return {
         "ok": ok,
         "verified": verified,
         "command": " ".join(cmd),
         "stdout": out,
         "stderr": err,
-        "auth_required": (not ok) and _looks_like_auth_error(err),
+        "auth_required": auth_required,
+        "reason": reason,
+        "reason_message": reason_message,
     }
+
 
 
 # --- Bindings fetch + cache -------------------------------------------------
