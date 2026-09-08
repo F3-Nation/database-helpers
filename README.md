@@ -20,7 +20,7 @@ The Auth Proxy runs as a background service on your machine and listens on `loca
 
 ### Prerequisites
 - [Google Cloud CLI (`gcloud`)](https://cloud.google.com/sdk/docs/install) installed
-- Your Google account must have the **Cloud SQL Client** role (`roles/cloudsql.client`) on the F3 Nation GCP project. Ask the F3 IT Leadership on Slack if you need access.
+- Your Google account must be a member of the **GCP: Database Access** Group in the F3 Nation Google Workspace. Membership grants the **Cloud SQL Client** role (`roles/cloudsql.client`) on the F3 Nation GCP project. Ask the F3 IT Leadership on Slack if you need access.
 - You need the **instance connection names** for prod and staging. They look like `project-id:region:instance-name`. You can find them by running `gcloud sql instances list` or asking a team lead.
 
 ### 1. Install the Auth Proxy
