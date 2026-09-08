@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument('--input_csv', required=True, help='Path to the input CSV file')
     parser.add_argument('--environment', choices=['staging', 'prod'], default='staging', help='Target environment (default is staging)')
     parser.add_argument('--commit', action='store_true', help='Commit changes (default is dry-run/rollback)')
-    parser.add_argument('--log_file', default='import_backblasts.log', help='Path to log file')
+    parser.add_argument('--log_file', default=None, help='Path to log file (defaults to next to the input CSV)')
     return parser.parse_args()
 
 
@@ -41,7 +41,12 @@ args = parse_args()
 ENV = args.environment
 COMMIT = args.commit
 CSV_FILE = args.input_csv
-LOG_FILE = args.log_file
+
+# Shared timestamp code so the log and backout SQL files are correlated
+RUN_TIMESTAMP = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+_csv_dir = os.path.dirname(os.path.abspath(CSV_FILE))
+_csv_base = os.path.splitext(os.path.basename(CSV_FILE))[0]
+LOG_FILE = args.log_file or os.path.join(_csv_dir, f'{_csv_base}_{RUN_TIMESTAMP}.log')
 
 log_handle = open(LOG_FILE, 'w', encoding='utf-8')
 log_handle.write(f"Log started: {datetime.now(timezone.utc).isoformat()}Z\n")
@@ -318,11 +323,12 @@ def insert_attendance(cur, rows, event_map, id_tracker):
 
 
 
-def generate_backout_sql(id_tracker, csv_file, env):
+def generate_backout_sql(id_tracker, csv_file, env, timestamp):
     """Generate a SQL file with DELETE commands to rollback the import."""
-    # Determine output path
-    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    sql_file = f'backout_{env}_{timestamp}.sql'
+    # Write the backout file next to the input CSV, correlated by timestamp
+    csv_dir = os.path.dirname(os.path.abspath(csv_file))
+    csv_base = os.path.splitext(os.path.basename(csv_file))[0]
+    sql_file = os.path.join(csv_dir, f'{csv_base}_backout_{timestamp}.sql')
     
     with open(sql_file, 'w', encoding='utf-8') as f:
         f.write(f"-- Backout SQL for import from {csv_file}\n")
@@ -587,7 +593,7 @@ def main():
         conn.close()
         
         # Generate backout SQL file
-        backout_file = generate_backout_sql(id_tracker, CSV_FILE, ENV)
+        backout_file = generate_backout_sql(id_tracker, CSV_FILE, ENV, RUN_TIMESTAMP)
         print(f"\n[BACKOUT] SQL rollback file generated: {backout_file}")
         print(f"  To rollback this import, execute: psql -f {backout_file}")
         
