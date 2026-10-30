@@ -228,6 +228,18 @@ WHERE ruo_old.user_id = ANY (:'old_user_ids')
         AND ruo_new.org_id  = ruo_old.org_id
   );
 
+\echo 'Deleting duplicate roles among old users (keeping lowest user ID)'
+DELETE FROM roles_x_users_x_org ruo_old
+WHERE ruo_old.user_id = ANY (:'old_user_ids')
+  AND EXISTS (
+      SELECT 1
+      FROM roles_x_users_x_org ruo_other
+      WHERE ruo_other.user_id = ANY (:'old_user_ids')
+        AND ruo_other.user_id < ruo_old.user_id
+        AND ruo_other.role_id = ruo_old.role_id
+        AND ruo_other.org_id  = ruo_old.org_id
+  );
+
 \echo 'Updating remaining roles'
 UPDATE roles_x_users_x_org
 SET user_id = :'new_user_id'
@@ -296,6 +308,19 @@ WHERE axu_old.user_id = ANY (:'old_user_ids')
         AND axu_new.award_period  = axu_old.award_period
   );
 
+\echo 'Deleting duplicate achievements among old users (keeping lowest user ID)'
+DELETE FROM achievements_x_users axu_old
+WHERE axu_old.user_id = ANY (:'old_user_ids')
+  AND EXISTS (
+      SELECT 1
+      FROM achievements_x_users axu_other
+      WHERE axu_other.user_id = ANY (:'old_user_ids')
+        AND axu_other.user_id < axu_old.user_id
+        AND axu_other.achievement_id = axu_old.achievement_id
+        AND axu_other.award_year     = axu_old.award_year
+        AND axu_other.award_period   = axu_old.award_period
+  );
+
 \echo 'Updating remaining achievements'
 UPDATE achievements_x_users
 SET user_id = :'new_user_id'
@@ -323,11 +348,11 @@ UPDATE api_keys
 SET owner_id = :'new_user_id'
 WHERE owner_id = ANY (:'old_user_ids');
 
-SELECT COUNT(*) AS remaining_old_permission_mappings
-FROM positions_x_orgs_x_users
-WHERE user_id = ANY (:'old_user_ids')
+SELECT COUNT(*) AS remaining_old_api_keys
+FROM api_keys
+WHERE owner_id = ANY (:'old_user_ids')
 \gset
-\echo 'Remaining API Key mappings for old user IDs (should be 0): ':remaining_old_permission_mappings
+\echo 'Remaining API Key mappings for old user IDs (should be 0): ':remaining_old_api_keys
 
 ------------------------------------------------------------
 -- Update expansion
@@ -396,6 +421,25 @@ SELECT COUNT(*) AS attendance_deleted_notplanned
 FROM deleted
 \gset
 \echo 'Deleted ':attendance_deleted_notplanned' attendance for old users when old and new users were both mapped and is_planned is FALSE.'
+
+-- duplicates among old users (same event and is_planned), keep lowest user ID
+WITH deleted AS (
+    DELETE FROM attendance a_old
+    WHERE a_old.user_id = ANY (:'old_user_ids'::int[])
+      AND EXISTS (
+          SELECT 1
+          FROM attendance a_other
+          WHERE a_other.user_id = ANY (:'old_user_ids'::int[])
+            AND a_other.user_id < a_old.user_id
+            AND a_other.event_instance_id = a_old.event_instance_id
+            AND a_other.is_planned = a_old.is_planned
+      )
+    RETURNING 1
+)
+SELECT COUNT(*) AS attendance_deleted_old_dupes
+FROM deleted
+\gset
+\echo 'Deleted ':attendance_deleted_old_dupes' duplicate attendance records among old users.'
 
 -- update remaining
 WITH updated AS (
