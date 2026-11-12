@@ -163,9 +163,15 @@ def main():
     
     # Read CSV
     print("Reading CSV file...")
-    with open(CSV_FILE, newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
+    # Excel's plain "CSV" save uses cp1252; fall back to it if UTF-8 fails.
+    # utf-8-sig strips the BOM Excel adds to "CSV UTF-8" files.
+    try:
+        with open(CSV_FILE, newline='', encoding='utf-8-sig') as f:
+            rows = list(csv.DictReader(f))
+    except UnicodeDecodeError:
+        print("CSV is not valid UTF-8; reading as cp1252 (Windows/Excel encoding).")
+        with open(CSV_FILE, newline='', encoding='cp1252') as f:
+            rows = list(csv.DictReader(f))
     
     if not rows:
         print(f"Error: {CSV_FILE} is empty.")
